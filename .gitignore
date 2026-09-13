@@ -1,0 +1,27 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Word temp files
+~$*.docx
+
+# Internal working documents — not part of the public project
+brief_updated_aftereachphase/
+notes/
+
+# Local progress tracking
+PROGRESS.md
+
+# IDE / tooling
+.claude/
+
+# Stale narrative reports — write-up to be completed later
+# (machine-generated CSVs are kept; authored .md and .txt conclusions are not)
+outputs/reports/*.md
+outputs/reports/*.txt

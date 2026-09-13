@@ -1,0 +1,3 @@
+Pair,Tests_passed,Hedge_ratio,Intercept,R2_training,Norm_mu,Norm_sigma,Test_days,Z_min,Z_max,Z_mean,Z_std,Long_signals,Short_signals,Total_signals,Days_in_mkt,Pct_in_mkt,Verdict
+AMZN/META,Both,0.597664,1.532298,0.7866,-0.035929,0.060724,145,-1.1505,5.425,2.0026,1.5844,0,2,2,98,67.59,WEAK mean reversion — spread has drifted from equilibrium
+MSFT/AAPL,Johansen 10%,0.871048,1.302213,0.957096,0.086963,0.118594,145,-4.2573,-0.4011,-2.4213,0.9328,1,0,1,123,84.83,WEAK mean reversion — spread has drifted from equilibrium

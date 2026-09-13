@@ -1,0 +1,16 @@
+Pair,OLS_direction,Hedge_ratio,Intercept,ADF_stat_on_residuals,ADF_pval_on_residuals,EG_stat,EG_pval,EG_cointegrated_5pct,Johansen_trace_stat_r0,Johansen_trace_crit_r0,Johansen_trace_crit_r0_10pct,Johansen_trace_stat_r1,Johansen_trace_crit_r1,Johansen_maxeig_stat_r0,Johansen_maxeig_crit_r0,Johansen_maxeig_crit_r0_10pct,Johansen_trace_pass_5pct,Johansen_trace_pass_10pct,Johansen_maxeig_pass_5pct,Johansen_maxeig_pass_10pct,Both_methods_agree,Tests_passed,Selected,Rank,EG_cointegrated_bonferroni
+AMZN/META,AMZN~META,0.5977,1.5323,-3.783,0.0031,-3.7827,0.0143,True,17.5429,15.4943,13.4294,0.368,3.8415,17.1749,14.2639,12.2971,True,True,True,True,True,Both,True,1,False
+NVDA/AMZN,AMZN~NVDA,0.2392,4.1551,-2.9539,0.0394,-2.9544,0.1214,False,9.2881,15.4943,13.4294,0.2901,3.8415,8.998,14.2639,12.2971,False,False,False,False,False,Neither,False,2,False
+GOOGL/AMZN,AMZN~GOOGL,0.6667,1.7967,-2.7359,0.068,-2.7364,0.1867,False,11.559,15.4943,13.4294,0.0976,3.8415,11.4614,14.2639,12.2971,False,False,False,False,False,Neither,False,3,False
+MSFT/AAPL,MSFT~AAPL,0.871,1.3022,-2.6904,0.0757,-2.6904,0.2031,False,14.563,15.4943,13.4294,2.457,3.8415,12.106,14.2639,12.2971,False,True,False,False,False,Johansen 10%,True,4,False
+MSFT/NVDA,MSFT~NVDA,0.4093,4.1892,-2.5819,0.0968,-2.5702,0.249,False,10.9123,15.4943,13.4294,0.333,3.8415,10.5793,14.2639,12.2971,False,False,False,False,False,Neither,False,5,False
+AAPL/AMZN,AMZN~AAPL,0.4882,2.567,-2.4133,0.138,-2.4139,0.3183,False,9.6199,15.4943,13.4294,1.6053,3.8415,8.0146,14.2639,12.2971,False,False,False,False,False,Neither,False,6,False
+MSFT/AMZN,AMZN~MSFT,0.5675,1.7987,-2.3394,0.1596,-2.34,0.3538,False,8.091,15.4943,13.4294,1.6447,3.8415,6.4463,14.2639,12.2971,False,False,False,False,False,Neither,False,7,False
+MSFT/META,MSFT~META,0.8381,0.7366,-2.2705,0.1816,-2.2706,0.3883,False,6.809,15.4943,13.4294,0.7145,3.8415,6.0945,14.2639,12.2971,False,False,False,False,False,Neither,False,8,False
+NVDA/META,META~NVDA,0.3675,4.4884,-2.1174,0.2376,-2.1179,0.467,False,4.5772,15.4943,13.4294,0.1003,3.8415,4.477,14.2639,12.2971,False,False,False,False,False,Neither,False,9,False
+GOOGL/NVDA,NVDA~GOOGL,2.5446,-8.7361,-2.0832,0.2513,-2.084,0.4848,False,5.7457,15.4943,13.4294,0.0001,3.8415,5.7456,14.2639,12.2971,False,False,False,False,False,Neither,False,10,False
+NVDA/AAPL,AAPL~NVDA,0.447,3.3843,-1.8936,0.3351,-1.8939,0.5831,False,4.5084,15.4943,13.4294,0.0425,3.8415,4.4659,14.2639,12.2971,False,False,False,False,False,Neither,False,11,False
+AAPL/META,AAPL~META,0.8564,-0.0557,-1.7965,0.3822,-1.7962,0.6316,False,4.6101,15.4943,13.4294,0.2307,3.8415,4.3794,14.2639,12.2971,False,False,False,False,False,Neither,False,12,False
+GOOGL/AAPL,AAPL~GOOGL,1.2378,-0.9857,-1.727,0.4172,-1.7281,0.6639,False,4.4252,15.4943,13.4294,0.0088,3.8415,4.4164,14.2639,12.2971,False,False,False,False,False,Neither,False,13,False
+GOOGL/META,META~GOOGL,0.9353,1.2772,-1.7188,0.4215,-1.7193,0.668,False,7.6755,15.4943,13.4294,0.408,3.8415,7.2675,14.2639,12.2971,False,False,False,False,False,Neither,False,14,False
+MSFT/GOOGL,MSFT~GOOGL,1.1201,0.2495,-1.6067,0.4802,-1.6075,0.7177,False,11.3939,15.4943,13.4294,4.0713,3.8415,7.3226,14.2639,12.2971,False,False,False,False,False,Neither,False,15,False

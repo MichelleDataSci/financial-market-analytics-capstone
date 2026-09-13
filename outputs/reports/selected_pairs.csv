@@ -1,0 +1,3 @@
+Pair,OLS_direction,Hedge_ratio,Intercept,EG_pval,EG_cointegrated_5pct,Johansen_trace_stat_r0,Johansen_trace_crit_r0,Johansen_trace_crit_r0_10pct,Johansen_trace_pass_5pct,Johansen_trace_pass_10pct,Tests_passed
+AMZN/META,AMZN~META,0.5977,1.5323,0.0143,True,17.5429,15.4943,13.4294,True,True,Both
+MSFT/AAPL,MSFT~AAPL,0.871,1.3022,0.2031,False,14.563,15.4943,13.4294,False,True,Johansen 10%

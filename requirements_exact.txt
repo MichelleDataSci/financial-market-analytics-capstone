@@ -1,5 +1,5 @@
 # Exact dependency versions used to produce all project outputs.
-# Generated on 2026-08-31 from the environment that ran the full pipeline.
+# Generated on 2026-09-14 from the environment that ran the full pipeline.
 #
 # To reproduce the exact environment:
 #   pip install -r requirements_exact.txt

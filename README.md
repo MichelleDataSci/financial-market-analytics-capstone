@@ -10,7 +10,6 @@ across six S&P 500 technology stocks (MSFT, GOOGL, NVDA, AAPL, AMZN, META).
 |-- data/
 |   |-- raw/          # downloaded OHLC / VIX / S&P 500 CSVs as-is
 |   +-- processed/    # master merged CSV, cleaned data
-|-- notebooks/        # optional Jupyter exploration
 |-- src/
 |   |-- phase1_data.py          # data ingestion (8 years, 6 stocks + benchmarks)
 |   |-- phase2_eda.py           # exploratory analysis (15 pairs, beta, VIX)

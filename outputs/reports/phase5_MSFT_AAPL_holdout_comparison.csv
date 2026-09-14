@@ -1,0 +1,12 @@
+Pair,Metric,Phase4_style_baseline,LSTM_enhanced
+MSFT/AAPL,Total_PnL,0.414767,0.414767
+MSFT/AAPL,Ann_PnL,0.104209,0.104209
+MSFT/AAPL,Ann_Vol,0.163023,0.163023
+MSFT/AAPL,Sharpe_ratio,0.6392,0.6392
+MSFT/AAPL,Sortino_ratio,0.7586,0.7586
+MSFT/AAPL,Max_drawdown,-0.216782,-0.216782
+MSFT/AAPL,Calmar_ratio,0.4807,0.4807
+MSFT/AAPL,Positive_Day_Rate_pct,51.72,51.72
+MSFT/AAPL,Num_trades,3.0,3.0
+MSFT/AAPL,Avg_trade_PnL,0.138256,0.138256
+MSFT/AAPL,Pct_in_market,57.83,57.83

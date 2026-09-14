@@ -1,0 +1,4 @@
+Signal_Date,Execution_Date,Exit_Date,Position,Signal_Z_score,Exit_Z_score,Holding_Days,Gross_PnL,Transaction_Cost,Net_PnL,Strategy
+2026-04-10,2026-04-13,2026-07-31,Short Spread,2.0718,5.425,109,-0.207188,0.002,-0.209188,LSTM_enhanced
+2026-01-07,2026-01-08,2026-02-09,Short Spread,2.0085,-0.4639,32,0.166915,0.004,0.162915,Phase4_baseline
+2026-04-10,2026-04-13,2026-07-31,Short Spread,2.0718,5.425,109,-0.207188,0.002,-0.209188,Phase4_baseline

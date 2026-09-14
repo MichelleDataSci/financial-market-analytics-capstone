@@ -17,6 +17,7 @@ across six S&P 500 technology stocks (MSFT, GOOGL, NVDA, AAPL, AMZN, META).
 |   |-- phase3_cointegration.py # pair screening: EG + Johansen, exports selected_pairs.csv
 |   |-- phase3_strategy.py      # backtesting engine (loops over all selected pairs)
 |   |-- phase4_unseen.py        # mean-reversion test on genuinely unseen 2026 data
+|   |-- phase5_ml_spread.py     # LSTM spread prediction + Step 8 2026 comparison
 |   +-- utils.py                # shared constants & paths
 |-- outputs/
 |   |-- charts/       # saved figures (named by pair where applicable)
@@ -41,6 +42,7 @@ python src/phase2_eda.py           # exploratory analysis (15 charts + tables)
 python src/phase3_cointegration.py # cointegration screening → selected_pairs.csv
 python src/phase3_strategy.py      # pairs trading backtest (all selected pairs)
 python src/phase4_unseen.py        # mean-reversion test on unseen 2026 data
+python src/phase5_ml_spread.py    # LSTM spread prediction + Step 8 2026 comparison
 ```
 
 ## Pair selection criterion
@@ -66,4 +68,11 @@ Running `phase3_cointegration.py` selects **AMZN/META** (primary) and **MSFT/AAP
 
 ## Phase 5
 
-Machine Learning for Predicting Spread — brief pending.
+Two-experiment LSTM pipeline predicting the standardised OLS spread residual and gating Phase 4 mean-reversion signals.
+
+**Historical experiment** (train 2018–2020, val 2021, test 2022–2025): chronological audit trail.
+**Final 2026 model** (train 2018–2024, val 2025, unseen test 2026-01-01 to 2026-07-31): definitive Step 8 evaluation.
+
+Architecture: 2-layer stacked LSTM (64→32 units), 20-day lookback, 5-day horizon, Dropout 0.2.
+A convergence filter gates Phase 4 entries: a trade is allowed only when `mean(|predicted h1–h5|) < |current z-score|`, indicating the spread is expected to contract.
+All preprocessing (OLS, scaler) is anchored strictly to the training window; no future data touches any fitting step.

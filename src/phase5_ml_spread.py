@@ -5,7 +5,7 @@ LSTM-based prediction of standardised OLS residuals for AMZN/META and MSFT/AAPL.
 Pipeline (per project brief)
 ------------------------------
 1.  OLS spread computed using log-transformed prices.  Parameters are
-    re-estimated on the training period (2018-2021) only, so no test-period
+    re-estimated on the training period (2018-2020) only, so no test-period
     data enters the spread construction.
 2.  Residuals standardised using fixed mean/std estimated on the LSTM training
     set (2018-2020) only — validation (2021) and test (2022+) are never used
@@ -105,7 +105,7 @@ tf.random.set_seed(SEED)
 # LSTM chronological splits
 # ---------------------------------------------------------------------------
 ML_TRAIN_END  = "2020-12-31"   # LSTM training data
-ML_VAL_START  = "2021-01-01"   # LSTM validation (within Phase 3b training period)
+ML_VAL_START  = "2021-01-01"   # LSTM validation year (not used for OLS, scaler, or LSTM fitting)
 ML_VAL_END    = "2021-12-31"
 ML_TEST_START = "2022-01-01"   # out-of-sample test (same as Phase 3b)
 
@@ -123,7 +123,9 @@ FINAL_VAL_END   = "2025-12-31"
 ML_OLS_END    = ML_TRAIN_END   # "2020-12-31"
 
 # Phase 4-style anchor for 2022-2025 holdout comparison (Step 8a)
-# Using the last year of the training period (2021) as the fixed anchor.
+# Use 2021 (the validation year, immediately preceding the test window) as the
+# fixed anchor — mirrors Phase 4's approach of anchoring to the last 12 months
+# before the test period.
 P4_HOLDOUT_ANCHOR_START = "2021-01-01"
 P4_HOLDOUT_ANCHOR_END   = "2021-12-31"
 
@@ -523,7 +525,7 @@ def run_phase5_pair(dep, indep, tests_passed):
     print(f"{'='*65}")
 
     # -----------------------------------------------------------------------
-    # Step 1: Load prices; re-estimate OLS on training data only (2018-2021)
+    # Step 1: Load prices; re-estimate OLS on training data only (2018-2020)
     # -----------------------------------------------------------------------
     close_df, open_df, log_close, log_open = load_prices(dep, indep)
     print(f"  Price data: {log_close.index[0].date()} to "
@@ -678,7 +680,8 @@ def run_phase5_pair(dep, indep, tests_passed):
     print(f"\n  Step 8a (supplementary) – 2022-2025 historical holdout "
           f"(Phase 4-style / 2021 anchor, not the actual Phase 4 comparison) ...")
 
-    # Fixed anchor: mean/std from last year of training (2021)
+    # Fixed anchor: mean/std from the validation year (2021), the year
+    # immediately before the 2022-2025 test window
     anchor_slice = raw_spread.loc[P4_HOLDOUT_ANCHOR_START:P4_HOLDOUT_ANCHOR_END]
     p4h_mu       = float(anchor_slice.mean())
     p4h_sigma    = float(anchor_slice.std())
@@ -686,7 +689,7 @@ def run_phase5_pair(dep, indep, tests_passed):
     print(f"    Fixed anchor ({P4_HOLDOUT_ANCHOR_START[:4]}) — "
           f"mu={p4h_mu:.6f}  sigma={p4h_sigma:.6f}")
 
-    # Build open spread using the same OLS (2018-2021)
+    # Build open spread using the same OLS (2018-2020)
     sp_open_full = build_open_spread(log_open, dep, indep, hr5, ic5)
 
     # Slice to test period

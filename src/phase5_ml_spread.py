@@ -323,21 +323,22 @@ def compute_win_rate(bt_df, cost_per_leg=COST_PER_LEG):
     Uses phase3_strategy.extract_trade_log so the trade boundary logic is
     consistent with Phase 3b.  Incomplete trades (position open at end of
     data) are excluded from the win rate denominator.
-    Returns (win_rate_pct, trade_pnl_list).
+    Returns (win_rate_pct, n_completed, trade_pnl_list).
+    n_completed is the denominator used for win_rate_pct.
     """
     trade_df = extract_trade_log(bt_df, cost_per_leg)
     if trade_df.empty:
-        return 0.0, []
+        return 0.0, 0, []
     # Only count completed trades: those with an Exit_Date before the last bar
     last_bar = bt_df.index[-1]
     completed = trade_df[pd.to_datetime(trade_df["Exit_Date"]) < last_bar]
     if completed.empty:
         # All trades still open — no completed trades to assess
-        return float("nan"), []
+        return float("nan"), 0, []
     trade_pnls = completed["Net_PnL"].tolist()
     wins       = sum(1 for p in trade_pnls if p > 0)
     win_rate   = wins / len(trade_pnls) * 100
-    return round(win_rate, 1), trade_pnls
+    return round(win_rate, 1), len(trade_pnls), trade_pnls
 
 
 # ---------------------------------------------------------------------------
@@ -448,10 +449,12 @@ def backtest_lstm_enhanced(zscore_series, spread_cl, spread_op, conv_dict,
             trade_cost[i] += 2 * cost_per_leg
             pos = 0
 
-        # Entry gated by LSTM convergence (no stop-loss guard needed; no stop)
+        # Entry gated by LSTM convergence (no stop-loss guard needed; no stop).
+        # Default to 1 (allow) when no prediction exists for this signal date
+        # so missing coverage never silently blocks a trade.
         if pos == 0:
             signal_date = dates[i - 1]
-            if conv_dict.get(signal_date, -1) == 1:
+            if conv_dict.get(signal_date, 1) == 1:
                 if z_prev < -z_entry:
                     trade_cost[i] += 2 * cost_per_leg
                     pos = 1
@@ -922,19 +925,33 @@ def run_phase5_final_2026(dep, indep, tests_passed):
     sp_2026_f   = build_raw_spread(log_close_2026, dep, indep, hr_f, ic_f)
     z_2026_f    = (sp_2026_f - mu_f) / sigma_f
 
-    # Use last SEQ_LEN bars of 2025 as warmup so rolling/lag features
-    # are populated for the earliest 2026 bars
-    warmup_z     = z_pre26.iloc[-SEQ_LEN:]
-    z_combo      = pd.concat([warmup_z, z_2026_f])
-    feat_combo   = build_features(z_combo).dropna()
-    feat_2026_f  = feat_combo.loc[feat_combo.index >= P4_TEST_START]
+    # Warm-up: prepend ROLLING_STD_WIN + SEQ_LEN - 1 pre-2026 z_std bars.
+    # This ensures:
+    #   (a) rolling/lag features are fully populated at the very first 2026 bar
+    #       (ROLLING_STD_WIN - 1 pre-2026 bars needed for roll_std to be valid),
+    #   (b) there are SEQ_LEN valid pre-2026 feature rows so the LSTM can form
+    #       a complete input window ending at the first 2026 bar — giving
+    #       predictions from day 1 of 2026 onward.
+    # Sequences are built on the FULL combined feature frame; signal dates are
+    # filtered to >= P4_TEST_START only AFTER sequence construction.
+    WARMUP_LEN = ROLLING_STD_WIN + SEQ_LEN - 1   # 20 + 20 - 1 = 39 bars
+    warmup_z   = z_pre26.iloc[-WARMUP_LEN:]
+    z_combo    = pd.concat([warmup_z, z_2026_f])
+    feat_combo = build_features(z_combo).dropna()
 
-    if len(feat_2026_f) < SEQ_LEN + HORIZON:
+    # Sanity check: at least HORIZON 2026 rows required for y labels
+    feat_2026_check = feat_combo.loc[feat_combo.index >= P4_TEST_START]
+    if len(feat_2026_check) < HORIZON:
         print("  WARNING: insufficient 2026 feature rows for sequences.")
         return None
 
-    # RMSE/MAE on 2026: build full sequences (needs HORIZON future bars)
-    X_te_f, y_te_f, idx_te_f = make_sequences(feat_2026_f)
+    # RMSE/MAE evaluation: build sequences on full feat_combo, then keep only
+    # those whose signal date falls inside 2026.
+    X_te_all, y_te_all, idx_te_all = make_sequences(feat_combo)
+    mask_te  = idx_te_all >= pd.Timestamp(P4_TEST_START)
+    X_te_f   = X_te_all[mask_te]
+    y_te_f   = y_te_all[mask_te]
+    idx_te_f = idx_te_all[mask_te]
     y_pred_f = model_f.predict(X_te_f, verbose=0)
     eval_f   = evaluate_predictions(y_te_f, y_pred_f)
 
@@ -998,9 +1015,14 @@ def run_phase5_final_2026(dep, indep, tests_passed):
 
     # ------------------------------------------------------------------
     # 7. Convergence signal for 2026 (inference only — no y labels needed)
+    #    Build on full feat_combo (same warm-up rationale as RMSE eval above),
+    #    then filter signal dates to 2026 after sequence construction.
     # ------------------------------------------------------------------
-    X_inf_f, idx_inf_f = make_sequences_infer(feat_2026_f)
-    y_pred_inf         = model_f.predict(X_inf_f, verbose=0)
+    X_inf_all, idx_inf_all = make_sequences_infer(feat_combo)
+    mask_inf   = idx_inf_all >= pd.Timestamp(P4_TEST_START)
+    X_inf_f    = X_inf_all[mask_inf]
+    idx_inf_f  = idx_inf_all[mask_inf]
+    y_pred_inf = model_f.predict(X_inf_f, verbose=0)
     pred_df_inf        = pd.DataFrame(
         {f"h{h+1}": y_pred_inf[:, h] for h in range(HORIZON)},
         index=idx_inf_f)
@@ -1035,10 +1057,23 @@ def run_phase5_final_2026(dep, indep, tests_passed):
 
     bt_p4 = backtest_phase4_style(z_2026_p4, sp_2026_p4, sp_op_p4, COST_PER_LEG)
     m_p4  = compute_metrics(bt_p4, label=f"{tag} P4 2026")
-    wr_p4, tpnl_p4 = compute_win_rate(bt_p4, COST_PER_LEG)
+    wr_p4, n_comp_p4, tpnl_p4 = compute_win_rate(bt_p4, COST_PER_LEG)
 
     # Phase 4 signal breakdown
     n_long_p4, n_short_p4, _, long_p4, short_p4 = count_signals(z_2026_p4)
+
+    # Verify every Phase 4 candidate signal has an LSTM prediction
+    p4_signal_dates = [pd.Timestamp(s["Signal_Date"])
+                       for s in long_p4 + short_p4]
+    missing_pred = [d for d in p4_signal_dates if d not in conv_dict_f]
+    if missing_pred:
+        print(f"  WARNING: {len(missing_pred)} Phase 4 signal date(s) lack an "
+              f"LSTM prediction: {[str(d.date()) for d in missing_pred]}")
+    else:
+        n_p4_sigs = len(p4_signal_dates)
+        print(f"  Verification: all {n_p4_sigs} Phase 4 signal date(s) have "
+              f"LSTM predictions" if n_p4_sigs else
+              f"  Verification: no Phase 4 signals fired in 2026")
 
     # ------------------------------------------------------------------
     # 9. LSTM-enhanced — same Phase 4 z-score signals, entries gated by
@@ -1048,7 +1083,7 @@ def run_phase5_final_2026(dep, indep, tests_passed):
         z_2026_p4, sp_2026_p4, sp_op_p4, conv_dict_f,
         Z_ENTRY_P4, Z_EXIT_P4, COST_PER_LEG)
     m_lstm  = compute_metrics(bt_lstm, label=f"{tag} LSTM+P4 2026")
-    wr_lstm, tpnl_lstm = compute_win_rate(bt_lstm, COST_PER_LEG)
+    wr_lstm, n_comp_lstm, tpnl_lstm = compute_win_rate(bt_lstm, COST_PER_LEG)
 
     n_long_lstm, n_short_lstm, _, long_lstm, short_lstm = \
         count_signals_lstm_gated(z_2026_p4, conv_dict_f)
@@ -1078,12 +1113,14 @@ def run_phase5_final_2026(dep, indep, tests_passed):
         fmt_b = f"{vb:.4f}" if isinstance(vb, float) else str(vb)
         fmt_l = f"{vl:.4f}" if isinstance(vl, float) else str(vl)
         print(row_fmt.format(label, fmt_b, fmt_l))
-    # Win rate
+    # Win rate + completed-trade count (denominator)
     wr_p4_s   = f"{wr_p4:.1f}%" if not (isinstance(wr_p4, float) and
                                           np.isnan(wr_p4)) else "n/a"
     wr_lstm_s = f"{wr_lstm:.1f}%" if not (isinstance(wr_lstm, float) and
                                            np.isnan(wr_lstm)) else "n/a"
     print(row_fmt.format("Completed-trade win rate", wr_p4_s, wr_lstm_s))
+    print(row_fmt.format("Completed trades (denom.)",
+                         str(n_comp_p4), str(n_comp_lstm)))
     print()
     print(f"    Signal counts:")
     blocked = (n_long_p4 + n_short_p4) - (n_long_lstm + n_short_lstm)
@@ -1105,6 +1142,9 @@ def run_phase5_final_2026(dep, indep, tests_passed):
         for key, _ in REPORT_KEYS
     ]
     cmp_rows += [
+        {"Pair": f"{dep}/{indep}", "Metric": "Completed_trades",
+         "Phase4_baseline": n_comp_p4,
+         "LSTM_enhanced":   n_comp_lstm},
         {"Pair": f"{dep}/{indep}", "Metric": "Win_rate_pct",
          "Phase4_baseline": round(wr_p4, 2) if not np.isnan(wr_p4) else None,
          "LSTM_enhanced":   round(wr_lstm, 2) if not np.isnan(wr_lstm) else None},
@@ -1230,16 +1270,18 @@ def run_phase5_final_2026(dep, indep, tests_passed):
         "P4_Trades":   m_p4.get("Num_trades"),
         "P4_PnL":      m_p4.get("Total_PnL"),
         "P4_MaxDD":    m_p4.get("Max_drawdown"),
-        "P4_WinRate":  round(wr_p4, 1) if not np.isnan(wr_p4) else None,
-        "P4_AvgTrade": m_p4.get("Avg_trade_PnL"),
-        "P4_InMkt":    m_p4.get("Pct_in_market"),
-        "LSTM_Sharpe": m_lstm.get("Sharpe_ratio"),
-        "LSTM_Trades": m_lstm.get("Num_trades"),
-        "LSTM_PnL":    m_lstm.get("Total_PnL"),
-        "LSTM_MaxDD":  m_lstm.get("Max_drawdown"),
-        "LSTM_WinRate": round(wr_lstm, 1) if not np.isnan(wr_lstm) else None,
-        "LSTM_AvgTrade": m_lstm.get("Avg_trade_PnL"),
-        "LSTM_InMkt":  m_lstm.get("Pct_in_market"),
+        "P4_WinRate":        round(wr_p4, 1) if not np.isnan(wr_p4) else None,
+        "P4_CompletedTrades": n_comp_p4,
+        "P4_AvgTrade":       m_p4.get("Avg_trade_PnL"),
+        "P4_InMkt":          m_p4.get("Pct_in_market"),
+        "LSTM_Sharpe":       m_lstm.get("Sharpe_ratio"),
+        "LSTM_Trades":       m_lstm.get("Num_trades"),
+        "LSTM_PnL":          m_lstm.get("Total_PnL"),
+        "LSTM_MaxDD":        m_lstm.get("Max_drawdown"),
+        "LSTM_WinRate":      round(wr_lstm, 1) if not np.isnan(wr_lstm) else None,
+        "LSTM_CompletedTrades": n_comp_lstm,
+        "LSTM_AvgTrade":     m_lstm.get("Avg_trade_PnL"),
+        "LSTM_InMkt":        m_lstm.get("Pct_in_market"),
     }
 
 
@@ -1272,7 +1314,9 @@ def count_signals_lstm_gated(z_series, conv_dict,
             pos = 0
         if pos == 0:
             signal_date = dates[i - 1]
-            if conv_dict.get(signal_date, -1) == 1:
+            # Default to 1 (allow) when no prediction exists so missing
+            # coverage never silently blocks a trade.
+            if conv_dict.get(signal_date, 1) == 1:
                 if z_prev < -z_entry:
                     long_entries.append({
                         "Execution_Date": str(dates[i].date()),

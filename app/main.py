@@ -33,7 +33,9 @@ from fastapi.templating import Jinja2Templates
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from phase3_cointegration import engle_granger, johansen, pick_direction  # noqa: E402
+from phase3_cointegration import (  # noqa: E402
+    classify_pair, engle_granger, johansen, pick_direction, select_johansen_lag,
+)
 from phase3_strategy import (  # noqa: E402
     Z_ENTRY, Z_EXIT, Z_STOP, LOOKBACK, COST_PER_LEG,
     backtest, build_open_spread, build_spread_zscore,
@@ -168,27 +170,34 @@ def run_analysis(
     log_df = np.log(close_df)
     log_a, log_b = log_df[ticker1], log_df[ticker2]
 
-    # Engle-Granger (best direction)
+    # pick_direction: choose the OLS direction with more stationary residuals.
     chosen_dir, hr, ic, _resid, adf_stat, adf_pval, dep, indep = \
         pick_direction(log_a, log_b, ticker1, ticker2)
+
+    # engle_granger: coint() p-value on the chosen direction — matches Phase 3.
+    # pick_direction's adf_pval (ADF on OLS residuals) selects the direction;
+    # engle_granger's eg_pval (coint()) drives the 5%/10% pass/fail decision.
+    eg_stat, eg_pval = engle_granger(log_df[dep], log_df[indep])
     eg = {
         "direction":   chosen_dir,
         "hedge_ratio": round(hr, 6),
         "intercept":   round(ic, 6),
         "adf_stat":    round(adf_stat, 4),
         "adf_pval":    round(adf_pval, 4),
-        "pass_5pct":   bool(adf_pval < 0.05),
-        "pass_10pct":  bool(adf_pval < 0.10),
+        "eg_stat":     round(eg_stat, 4),
+        "eg_pval":     round(eg_pval, 4),
+        "pass_5pct":   bool(eg_pval < 0.05),
+        "pass_10pct":  bool(eg_pval < 0.10),
     }
 
-    # Johansen (k_ar_diff=1 standard default)
-    jo = johansen(log_df[[dep, indep]], det_order=0, k_ar_diff=1)
+    # Johansen: BIC-selected lag, matching Phase 3's VAR.select_order() approach.
+    k_ar_diff = select_johansen_lag(log_df[[dep, indep]])
+    jo = johansen(log_df[[dep, indep]], det_order=0, k_ar_diff=k_ar_diff)
 
-    # Phase 3 rule: EG 5% OR Johansen trace 5% → cointegrated.
-    # Johansen trace 10% only → borderline (signals generated, labelled as such).
-    # Max-eigenvalue is displayed but not used in the decision.
-    passes_5pct       = eg["pass_5pct"] or jo["trace_pass_5pct"]
-    passes_10pct_only = (not passes_5pct) and jo["trace_pass_10pct"]
+    # Classification via the shared Phase 3 rule (single source of truth).
+    _label = classify_pair(eg["pass_5pct"], jo["trace_pass_5pct"], jo["trace_pass_10pct"])
+    is_cointegrated = _label != "none"
+    is_borderline   = _label == "borderline"
 
     if eg["pass_5pct"] and jo["trace_pass_5pct"]:
         summary = "Both EG and Johansen trace pass at 5% — strong cointegration evidence."
@@ -196,7 +205,7 @@ def run_analysis(
         summary = "EG passes at 5%; Johansen trace inconclusive — included."
     elif jo["trace_pass_5pct"]:
         summary = "Johansen trace passes at 5%; EG inconclusive — included."
-    elif passes_10pct_only:
+    elif is_borderline:
         summary = (
             "Johansen trace passes at 10% only — borderline. "
             "Included per supervisor-approved selection rule; interpret results cautiously."
@@ -204,7 +213,6 @@ def run_analysis(
     else:
         summary = "No cointegration detected (EG or Johansen trace at 5% or 10%) — signals not generated."
 
-    is_cointegrated = passes_5pct or passes_10pct_only
     result: dict = {
         "ticker1": ticker1,
         "ticker2": ticker2,
@@ -218,7 +226,7 @@ def run_analysis(
         "engle_granger": eg,
         "johansen":      jo,
         "is_cointegrated":   is_cointegrated,
-        "is_borderline":     passes_10pct_only,
+        "is_borderline":     is_borderline,
         "cointegration_summary": summary,
         "signals":   [],
         "n_signals": 0,

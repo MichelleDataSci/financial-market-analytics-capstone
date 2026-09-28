@@ -129,6 +129,39 @@ def johansen(log_pair_df, det_order=0, k_ar_diff=1):
     }
 
 
+def classify_pair(
+    eg_pass_5pct: bool,
+    jo_trace_pass_5pct: bool,
+    jo_trace_pass_10pct: bool,
+) -> str:
+    """
+    Single source of truth for the Phase 3 / app selection rule.
+
+    Returns:
+      'primary'   -- EG 5% or Johansen trace 5% passes
+      'borderline' -- Johansen trace 10% only (supervisor-approved secondary)
+      'none'      -- neither
+    """
+    if eg_pass_5pct or jo_trace_pass_5pct:
+        return "primary"
+    if jo_trace_pass_10pct:
+        return "borderline"
+    return "none"
+
+
+def select_johansen_lag(log_pair_df: "pd.DataFrame", maxlags: int = 5) -> int:
+    """BIC-selected VAR lag for Johansen test (mirrors Phase 3 lag selection).
+
+    Runs VAR.select_order() on differenced log prices and returns the BIC-
+    chosen lag, floored at 1.  Phase 3 takes the median of this across all 15
+    pairs; the app calls it per-pair — both yield k_ar_diff=1 for the current
+    dataset because all BIC selections are 0 or 1 and max(1, median)=1.
+    """
+    diff_df = log_pair_df.diff().dropna()
+    sel = VAR(diff_df).select_order(maxlags=maxlags)
+    return max(1, int(sel.selected_orders["bic"]))
+
+
 # ---------------------------------------------------------------------------
 # Main execution
 # ---------------------------------------------------------------------------
@@ -249,9 +282,8 @@ def main():
         else:
             tests_passed = "Neither"
 
-        # Selected = True for primary criterion (EG or Johansen at 5%) OR for
-        # the secondary borderline criterion (Johansen trace at 10%).
-        selected = eg_pass or joh_pass_5 or joh_pass_10
+        # Selected = True for primary or borderline criterion (classify_pair).
+        selected = classify_pair(eg_pass, joh_pass_5, joh_pass_10) != "none"
 
         records.append({
             "Pair":                       pair_label,
@@ -605,7 +637,7 @@ def main():
         else:
             tests_passed = "Neither"
 
-        selected_train = eg_pass or joh_pass_5 or joh_pass_10
+        selected_train = classify_pair(eg_pass, joh_pass_5, joh_pass_10) != "none"
 
         train_records.append({
             "Pair":                  f"{a}/{b}",

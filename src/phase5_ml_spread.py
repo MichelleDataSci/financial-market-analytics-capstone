@@ -89,7 +89,7 @@ from tensorflow import keras
 from tensorflow.keras import layers, callbacks
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from utils import DATA_RAW, CHARTS_DIR, REPORTS_DIR, MODELS_DIR
+from utils import DATA_RAW, CHARTS_DIR, REPORTS_DIR, MODELS_DIR, load_or_download_2026
 from phase3_strategy import (
     load_prices, build_open_spread, backtest, compute_metrics,
     extract_trade_log,
@@ -560,26 +560,26 @@ def backtest_lstm_enhanced(zscore_series, spread_cl, spread_op, conv_dict,
     }, index=zscore_series.index)
 
 
-def download_2026_prices(dep, indep, start, end_exclusive):
+def download_2026_prices(dep, indep, start, end_exclusive, refresh=False):
     """
-    Download 2026 Close and Open prices for both tickers via yfinance.
+    Load 2026 Close and Open prices for both tickers.
+    Reads from data/raw/{ticker}_2026.csv if it exists; downloads and caches
+    on first call or when refresh=True.
     Returns (close_df, open_df, log_close, log_open) or None on failure.
-    Mirrors the download logic in phase4_unseen.py.
     """
     close_px, open_px = {}, {}
     for ticker in [dep, indep]:
-        print(f"    Downloading {ticker} ...", end=" ")
-        df = yf.download(ticker, start=start, end=end_exclusive,
-                         auto_adjust=True, progress=False)
-        if df.empty:
-            print("WARNING: no data returned.")
+        try:
+            df = load_or_download_2026(ticker, start=start,
+                                        end_exclusive=end_exclusive,
+                                        refresh=refresh)
+        except RuntimeError as e:
+            print(f"    WARNING: {e}")
             return None
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
-        df.index.name = "Date"
+        source = "cache" if not refresh else "download"
+        print(f"    {ticker}: {len(df)} trading days ({source})")
         close_px[ticker] = df["Close"]
         open_px[ticker]  = df["Open"]
-        print(f"{len(df)} trading days")
 
     close_df = pd.DataFrame(close_px).dropna()
     open_df  = pd.DataFrame(open_px).reindex(close_df.index).dropna()
@@ -909,7 +909,7 @@ def run_phase5_pair(dep, indep, tests_passed):
 # Step 8b: Final 2026 evaluation — separate LSTM model trained on 2018-2024
 # ---------------------------------------------------------------------------
 
-def run_phase5_final_2026(dep, indep, tests_passed):
+def run_phase5_final_2026(dep, indep, tests_passed, refresh=False):
     """
     Train a fresh LSTM on 2018-2024 (val 2025) and evaluate on 2026.
     All pre-processing (OLS, scaler, feature construction) uses only data
@@ -1012,7 +1012,8 @@ def run_phase5_final_2026(dep, indep, tests_passed):
     # 6. Download 2026 data and evaluate LSTM on 2026
     # ------------------------------------------------------------------
     print(f"\n  Downloading 2026 data ...")
-    data_2026 = download_2026_prices(dep, indep, P4_TEST_START, P4_TEST_END_EX)
+    data_2026 = download_2026_prices(dep, indep, P4_TEST_START, P4_TEST_END_EX,
+                                      refresh=refresh)
     if data_2026 is None:
         print("  ERROR: 2026 data unavailable — aborting final 2026 evaluation.")
         return None
@@ -1456,6 +1457,12 @@ def count_signals_lstm_gated(z_series, conv_dict,
 # ---------------------------------------------------------------------------
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Phase 5: LSTM spread prediction")
+    parser.add_argument("--refresh", action="store_true",
+                        help="Re-download 2026 data and overwrite cached files in data/raw/")
+    args = parser.parse_args()
+
     # Force deterministic TF ops so reruns produce identical weights.
     # Must be called before any TF computation.
     tf.config.experimental.enable_op_determinism()
@@ -1533,7 +1540,8 @@ def main():
     for _, row in sel_df.iterrows():
         dep, indep = row["OLS_direction"].split("~")
         result = run_phase5_final_2026(
-            dep=dep, indep=indep, tests_passed=row["Tests_passed"])
+            dep=dep, indep=indep, tests_passed=row["Tests_passed"],
+            refresh=args.refresh)
         if result is not None:
             final_rows.append(result)
 

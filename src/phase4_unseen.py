@@ -26,11 +26,10 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import statsmodels.api as sm
-import yfinance as yf
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from utils import DATA_RAW, CHARTS_DIR, REPORTS_DIR
+from utils import DATA_RAW, CHARTS_DIR, REPORTS_DIR, load_or_download_2026
 
 # ---------------------------------------------------------------------------
 # Shared parameters
@@ -47,7 +46,7 @@ Z_EXIT     = 0.0
 # Per-pair runner
 # ---------------------------------------------------------------------------
 
-def run_phase4_pair(dep, indep, tests_passed):
+def run_phase4_pair(dep, indep, tests_passed, refresh=False):
     """
     Run the full Phase 4 mean-reversion test for one (dep, indep) pair.
     Returns a summary dict for the cross-pair comparison table.
@@ -102,27 +101,23 @@ def run_phase4_pair(dep, indep, tests_passed):
     print(f"    Fixed sigma          : {sigma:.6f}")
     print(f"    Z = (spread - {mu:.4f}) / {sigma:.4f}")
 
-    # ── Step 4: Download unseen 2026 data ──
-    print(f"\n  [Step 4] Downloading unseen data ({TEST_START} to {TEST_END}) ...")
+    # ── Step 4: Load unseen 2026 data (cached or fresh download) ──
+    print(f"\n  [Step 4] Loading unseen data ({TEST_START} to {TEST_END}) ...")
     test_end_exclusive = "2026-08-01"
     test_prices = {}
     for ticker in [dep, indep]:
-        print(f"    Downloading {ticker} ...", end=" ")
-        df_t = yf.download(
-            ticker, start=TEST_START, end=test_end_exclusive,
-            auto_adjust=True, progress=False
-        )
-        if df_t.empty:
-            print("WARNING: no data returned.")
-            continue
-        if isinstance(df_t.columns, pd.MultiIndex):
-            df_t.columns = df_t.columns.get_level_values(0)
-        df_t.index.name = "Date"
-        test_prices[ticker] = df_t["Close"]
-        print(f"{len(df_t)} trading days")
+        try:
+            df_t = load_or_download_2026(ticker, start=TEST_START,
+                                          end_exclusive=test_end_exclusive,
+                                          refresh=refresh)
+            source = "download" if refresh else "cache"
+            print(f"    {ticker}: {len(df_t)} trading days ({source})")
+            test_prices[ticker] = df_t["Close"]
+        except RuntimeError as e:
+            print(f"    WARNING: {e}")
 
     if len(test_prices) < 2:
-        print(f"  ERROR: could not download test data for {dep}/{indep}. Skipping pair.")
+        print(f"  ERROR: could not load test data for {dep}/{indep}. Skipping pair.")
         return None
 
     test_df  = pd.DataFrame(test_prices).dropna()
@@ -376,6 +371,12 @@ def run_phase4_pair(dep, indep, tests_passed):
 # ---------------------------------------------------------------------------
 # Main — read selected pairs and run Phase 4 for each
 # ---------------------------------------------------------------------------
+import argparse as _argparse
+_parser = _argparse.ArgumentParser(description="Phase 4: unseen 2026 data evaluation")
+_parser.add_argument("--refresh", action="store_true",
+                     help="Re-download 2026 data and overwrite cached files in data/raw/")
+_args = _parser.parse_args()
+
 print("=" * 65)
 print("PHASE 4 -- TESTING MEAN REVERSION ON UNSEEN DATA")
 print("=" * 65)
@@ -383,6 +384,8 @@ print(f"\n  Training period : 2018-01-01 to {TRAIN_END}")
 print(f"  Norm window     : {NORM_START} to {TRAIN_END}")
 print(f"  Test period     : {TEST_START} to {TEST_END}")
 print(f"  Entry |Z| > {Z_ENTRY}, exit Z crosses {Z_EXIT}")
+if _args.refresh:
+    print("  --refresh: will re-download 2026 data from yfinance")
 
 selected_csv = REPORTS_DIR / "selected_pairs.csv"
 if selected_csv.exists():
@@ -404,7 +407,7 @@ else:
 # Run all pairs
 summary_rows = []
 for dep, indep, tests_passed in pair_list:
-    result = run_phase4_pair(dep, indep, tests_passed)
+    result = run_phase4_pair(dep, indep, tests_passed, refresh=_args.refresh)
     if result is not None:
         summary_rows.append(result)
 

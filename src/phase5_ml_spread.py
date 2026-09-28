@@ -98,8 +98,9 @@ from phase3_strategy import (
 # Reproducibility
 # ---------------------------------------------------------------------------
 SEED = 42
-np.random.seed(SEED)
-tf.random.set_seed(SEED)
+# tf.keras.utils.set_random_seed sets TF, NumPy, and Python random seeds.
+# enable_op_determinism() is called once in main() before any computation.
+tf.keras.utils.set_random_seed(SEED)
 
 # ---------------------------------------------------------------------------
 # LSTM chronological splits
@@ -604,8 +605,7 @@ def run_phase5_pair(dep, indep, tests_passed):
     print(f"\n  Step 5 – LSTM training "
           f"(units={LSTM_UNITS_1}/{LSTM_UNITS_2}, dropout={DROPOUT}, "
           f"lr={LEARNING_RATE}, patience={PATIENCE})...")
-    tf.random.set_seed(SEED)
-    np.random.seed(SEED)
+    tf.keras.utils.set_random_seed(SEED)
     model = build_lstm(n_features)
     es    = callbacks.EarlyStopping(monitor="val_loss", patience=PATIENCE,
                                      restore_best_weights=True, verbose=0)
@@ -926,8 +926,7 @@ def run_phase5_final_2026(dep, indep, tests_passed):
     # 5. Train LSTM
     # ------------------------------------------------------------------
     print(f"  Training final LSTM (patience={PATIENCE}) ...")
-    tf.random.set_seed(SEED)
-    np.random.seed(SEED)
+    tf.keras.utils.set_random_seed(SEED)
     model_f = build_lstm(n_features)
     es_f    = callbacks.EarlyStopping(monitor="val_loss", patience=PATIENCE,
                                         restore_best_weights=True, verbose=0)
@@ -1392,6 +1391,10 @@ def count_signals_lstm_gated(z_series, conv_dict,
 # ---------------------------------------------------------------------------
 
 def main():
+    # Force deterministic TF ops so reruns produce identical weights.
+    # Must be called before any TF computation.
+    tf.config.experimental.enable_op_determinism()
+
     print("=" * 65)
     print("PHASE 5 – MACHINE LEARNING FOR PREDICTING SPREAD")
     print("=" * 65)

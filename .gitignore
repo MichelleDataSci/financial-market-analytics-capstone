@@ -21,6 +21,9 @@ PROGRESS.md
 # IDE / tooling
 .claude/
 
+# Local virtual environments
+.venv*/
+
 # Stale narrative reports — write-up to be completed later
 # (machine-generated CSVs are kept; authored .md and .txt conclusions are not)
 outputs/reports/*.md

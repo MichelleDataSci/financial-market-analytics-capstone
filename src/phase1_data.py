@@ -7,6 +7,7 @@ computes daily returns, adds time indicators, and saves a master CSV.
 import yfinance as yf
 import pandas as pd
 import sys
+sys.stdout.reconfigure(encoding="utf-8")
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))

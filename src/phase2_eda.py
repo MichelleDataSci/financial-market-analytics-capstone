@@ -4,6 +4,7 @@ Loads master_data.csv and produces 8 analyses/charts saved to outputs/.
 """
 
 import sys
+sys.stdout.reconfigure(encoding="utf-8")
 import warnings
 from itertools import combinations
 from pathlib import Path

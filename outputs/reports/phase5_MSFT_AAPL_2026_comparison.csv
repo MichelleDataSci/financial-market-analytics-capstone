@@ -14,4 +14,4 @@ MSFT/AAPL,Win_rate_pct,,
 MSFT/AAPL,Long_signals,1.0,1.0
 MSFT/AAPL,Short_signals,0.0,0.0
 MSFT/AAPL,Total_signals,1.0,1.0
-MSFT/AAPL,LSTM_conv_pct,,80.0
+MSFT/AAPL,LSTM_conv_pct,,84.8

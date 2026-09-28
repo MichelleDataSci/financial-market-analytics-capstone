@@ -5,16 +5,15 @@ across six S&P 500 technology stocks (MSFT, GOOGL, NVDA, AAPL, AMZN, META).
 
 ## Project scope
 
-The project brief defined six objectives:
+The project brief defined five objectives:
 
-1. Collect and pre-process daily OHLCV data for six large-cap S&P 500 technology stocks (2018–2025).
-2. Conduct exploratory data analysis: correlation, beta, and VIX sensitivity across all 15 pairs.
-3. Screen for cointegrated pairs using Engle-Granger and Johansen tests; backtest a pairs trading strategy with walk-forward analysis and sensitivity grids.
-4. ~~Sentiment analysis of financial news to augment the spread signal.~~ **Removed from scope** by the project supervisor on 21 September 2026. The pipeline is complete as Phases 1–6 without this component.
-5. Test the selected pairs on genuinely unseen 2026 data to evaluate out-of-sample mean reversion.
-6. Apply an LSTM model to predict the spread and gate Phase 4 entries via a convergence filter.
+1. Comparative study of technology stocks in S&P 500 — returns, volatility, correlations (EDA).
+2. Identify pairs of stocks which are cointegrated over a period (8 years).
+3. Design a pairs trading strategy and execute on train/test data.
+4. ~~Sentiment analysis of technology stocks using X (Twitter) data or Google News.~~ **Removed from scope** by the project supervisor on 21 September 2026.
+5. Web application development.
 
-The project is submitted as **Phases 1–6** (corresponding to `phase1_data.py` through `phase5_ml_spread.py` plus the FastAPI analyser app).
+The work is delivered as **Phases 1–6** per the phase breakdown: Phase 1 (data ingestion), Phase 2 (EDA), Phase 3 (cointegration screening and backtesting), Phase 4 (unseen 2026 data), Phase 5 (LSTM spread prediction), Phase 6 (FastAPI web application).
 
 ## Project layout
 

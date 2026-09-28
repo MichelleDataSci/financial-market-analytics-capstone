@@ -1,4 +1,4 @@
-Period,Days,Total_PnL,Ann_PnL,Ann_Vol,Sharpe_ratio,Sortino_ratio,Max_drawdown,Calmar_ratio,Positive_Day_Rate_pct,Num_trades_est,Avg_trade_PnL,Pct_in_market
-Train 2018-2021,1008,0.426799,0.1067,0.1909,0.5589,0.5437,-0.3001,0.3555,51.41,30,0.014227,45.73
+Period,Days,Total_PnL,Ann_PnL,Ann_Vol,Sharpe_ratio,Sortino_ratio,Max_drawdown,Calmar_ratio,Positive_Day_Rate_pct,Num_trades,Avg_trade_PnL,Pct_in_market
+Train 2018-2021,1008,0.426799,0.1067,0.1909,0.5589,0.5437,-0.3001,0.3555,51.41,31,0.013768,45.73
 Test 2022-2025,1003,0.137688,0.034593,0.277874,0.1245,0.089,-0.587759,0.0589,52.68,27,0.0051,33.5
 Full 2018-2025,2011,0.511182,0.064057,0.239226,0.2678,0.219,-0.587759,0.109,51.79,57,0.008968,40.33

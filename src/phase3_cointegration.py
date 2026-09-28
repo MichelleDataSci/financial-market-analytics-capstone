@@ -516,7 +516,7 @@ def main():
         fontsize=11
     )
 
-    # Top panel: EG p-value
+    # Left panel: EG p-value
     ax2a.barh(_rank_df["Pair"], _rank_df["EG_pval"], color=_bar_colors,
               edgecolor="white", linewidth=0.5)
     ax2a.axvline(0.05, color="red", linestyle="--", linewidth=1.3)
@@ -524,7 +524,7 @@ def main():
     ax2a.set_title("EG rank  (ascending p-value)", fontsize=10)
     ax2a.invert_yaxis()
 
-    # Bottom panel: Johansen ratio (trace stat / 5% CV)
+    # Right panel: Johansen ratio (trace stat / 5% CV)
     ax2b.barh(_rank_df["Pair"], _rank_df["Johansen_ratio"], color=_bar_colors,
               edgecolor="white", linewidth=0.5)
     ax2b.axvline(1.0, color="red", linestyle="--", linewidth=1.3,

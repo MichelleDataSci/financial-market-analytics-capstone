@@ -214,3 +214,48 @@ class TestCachedTickerPairs:
         )
         assert resp.status_code == 200
         assert "0.0143" in resp.text
+
+
+@pytest.mark.slow
+class TestPredictEndpoint:
+    """Integration tests for GET /api/predict/{pair} — loads TF artefacts.
+
+    Uses setup_class/teardown_class so the FastAPI lifespan (artefact loading)
+    runs once for the whole class rather than on every request.
+    """
+
+    @classmethod
+    def setup_class(cls):
+        cls._ctx = TestClient(app)
+        cls._ctx.__enter__()
+
+    @classmethod
+    def teardown_class(cls):
+        cls._ctx.__exit__(None, None, None)
+
+    def test_known_pair_amzn_meta_returns_200(self):
+        resp = self._ctx.get("/api/predict/AMZN_META")
+        assert resp.status_code == 200
+
+    def test_response_has_required_fields(self):
+        resp = self._ctx.get("/api/predict/AMZN_META")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["pair"] == "AMZN_META"
+        assert data["dep"] == "AMZN"
+        assert data["indep"] == "META"
+        assert "signal_date" in data
+        assert isinstance(data["z_std"], float)
+        assert isinstance(data["forecast"], list)
+        assert len(data["forecast"]) == 5
+        assert all(isinstance(v, float) for v in data["forecast"])
+        assert isinstance(data["converging"], bool)
+
+    def test_unknown_pair_returns_404(self):
+        resp = self._ctx.get("/api/predict/NVDA_GOOGL")
+        assert resp.status_code == 404
+        assert "NVDA_GOOGL" in resp.json()["detail"]
+
+    def test_malformed_pair_returns_404(self):
+        resp = self._ctx.get("/api/predict/NOT_A_PAIR")
+        assert resp.status_code == 404

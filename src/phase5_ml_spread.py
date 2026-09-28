@@ -347,13 +347,13 @@ def save_artifacts(tag, model, hr, ic, mu, sigma):
     Save final LSTM model and fitted OLS/scaler parameters to models/.
 
     Files written:
-      models/{tag}_lstm_final.keras
-      models/{tag}_ols_params.joblib   — {"hedge_ratio": hr, "intercept": ic}
-      models/{tag}_scaler_params.joblib — {"mu": mu, "sigma": sigma}
+      models/{tag}_lstm_v1.keras
+      models/{tag}_ols_v1.joblib   — {"hedge_ratio": hr, "intercept": ic}
+      models/{tag}_scaler_v1.joblib — {"mu": mu, "sigma": sigma}
     """
-    model_path  = MODELS_DIR / f"{tag}_lstm_final.keras"
-    ols_path    = MODELS_DIR / f"{tag}_ols_params.joblib"
-    scaler_path = MODELS_DIR / f"{tag}_scaler_params.joblib"
+    model_path  = MODELS_DIR / f"{tag}_lstm_v1.keras"
+    ols_path    = MODELS_DIR / f"{tag}_ols_v1.joblib"
+    scaler_path = MODELS_DIR / f"{tag}_scaler_v1.joblib"
     model.save(model_path)
     joblib.dump({"hedge_ratio": hr, "intercept": ic}, ols_path)
     joblib.dump({"mu": mu, "sigma": sigma}, scaler_path)
@@ -372,9 +372,9 @@ def load_artifacts(tag):
       scaler_params = {"mu": float, "sigma": float}
     Raises FileNotFoundError if any file is missing.
     """
-    model_path  = MODELS_DIR / f"{tag}_lstm_final.keras"
-    ols_path    = MODELS_DIR / f"{tag}_ols_params.joblib"
-    scaler_path = MODELS_DIR / f"{tag}_scaler_params.joblib"
+    model_path  = MODELS_DIR / f"{tag}_lstm_v1.keras"
+    ols_path    = MODELS_DIR / f"{tag}_ols_v1.joblib"
+    scaler_path = MODELS_DIR / f"{tag}_scaler_v1.joblib"
     for p in (model_path, ols_path, scaler_path):
         if not p.exists():
             raise FileNotFoundError(

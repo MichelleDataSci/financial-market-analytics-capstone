@@ -107,7 +107,7 @@ Reads saved artefacts from `models/` and cached raw prices from `data/raw/`. Req
 python -m pytest tests/ -v
 ```
 
-66 tests covering the backtesting engine (Phase 3b), Phase 5 utilities, and the FastAPI app.
+77 tests covering the backtesting engine (Phase 3b), Phase 5 utilities, predict utilities, and the FastAPI app.
 
 ## FastAPI deployment
 
@@ -126,6 +126,7 @@ Then open `http://127.0.0.1:8000` in your browser.
 | `GET`  | `/` | Form page — select cached tickers or upload a CSV |
 | `POST` | `/analyse` | Run analysis and return an HTML results page |
 | `POST` | `/api/analyse` | Same analysis as JSON (charts omitted) |
+| `GET`  | `/api/predict/{pair}` | Latest 5-day z-score forecast and convergence gate for a saved pair (e.g. `AMZN_META`, `MSFT_AAPL`). Artefacts loaded once at startup; no retraining. Returns 404 for unknown pairs. |
 
 ### What the user sees
 
@@ -244,4 +245,25 @@ For AMZN/META, only 21.4% of 2026 bars were classified as converging, so the gat
 | `outputs/reports/strategy_cross_pair_summary.csv` | Cross-pair strategy comparison with Sharpe CIs |
 | `outputs/reports/phase4_cross_pair_summary.csv` | Phase 4 signal summary and mean-reversion verdict |
 | `outputs/reports/phase5_cross_pair_final_summary.csv` | Phase 5 definitive 2026 LSTM vs Phase 4 baseline |
-| `models/` | Saved LSTM weights (`.keras`) and scalers (`.joblib`) |
+| `models/{pair}_lstm_v1.keras` | Saved LSTM weights (versioned) |
+| `models/{pair}_ols_v1.joblib` | OLS hedge ratio and intercept |
+| `models/{pair}_scaler_v1.joblib` | Spread mean and std used for z-score normalisation |
+
+## Data sources and citations
+
+**Price data**  
+All OHLCV data is sourced from [Yahoo Finance](https://finance.yahoo.com/) via the
+[yfinance](https://github.com/ranaroussi/yfinance) library.
+
+**Libraries**
+
+| Library | Purpose | Link |
+|---------|---------|------|
+| [pandas](https://pandas.pydata.org/) | Data manipulation and time-series alignment | https://pandas.pydata.org/ |
+| [NumPy](https://numpy.org/) | Numerical arrays and linear algebra | https://numpy.org/ |
+| [statsmodels](https://www.statsmodels.org/) | Engle-Granger `coint()`, Johansen test, VAR lag selection | https://www.statsmodels.org/ |
+| [TensorFlow / Keras](https://www.tensorflow.org/) | LSTM model training and inference | https://www.tensorflow.org/ |
+| [scikit-learn / joblib](https://scikit-learn.org/) | Artefact serialisation (`.joblib`) | https://scikit-learn.org/ |
+| [FastAPI](https://fastapi.tiangolo.com/) | Web application and REST API | https://fastapi.tiangolo.com/ |
+| [matplotlib](https://matplotlib.org/) | All charts and figures | https://matplotlib.org/ |
+| [seaborn](https://seaborn.pydata.org/) | Heatmap and styled plots | https://seaborn.pydata.org/ |

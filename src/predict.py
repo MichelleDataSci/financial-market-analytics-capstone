@@ -3,9 +3,9 @@ predict.py — Load saved LSTM artefacts and print the latest 5-day z-score
 forecast and convergence gate decision for each selected pair.
 
 No retraining. Reads:
-    models/{TAG}_lstm_final.keras
-    models/{TAG}_ols_params.joblib
-    models/{TAG}_scaler_params.joblib
+    models/{TAG}_lstm_v1.keras
+    models/{TAG}_ols_v1.joblib
+    models/{TAG}_scaler_v1.joblib
     data/raw/{dep}_raw.csv
     data/raw/{indep}_raw.csv
     outputs/reports/selected_pairs.csv
@@ -34,9 +34,9 @@ ROLLING_STD_WIN = 20
 def load_artefacts(tag):
     """Return (model, ols_params, scaler_params) for the given pair tag."""
     import tensorflow as tf  # deferred: avoid TF startup cost at import time
-    model  = tf.keras.models.load_model(MODELS_DIR / f"{tag}_lstm_final.keras")
-    ols    = joblib.load(MODELS_DIR / f"{tag}_ols_params.joblib")
-    scaler = joblib.load(MODELS_DIR / f"{tag}_scaler_params.joblib")
+    model  = tf.keras.models.load_model(MODELS_DIR / f"{tag}_lstm_v1.keras")
+    ols    = joblib.load(MODELS_DIR / f"{tag}_ols_v1.joblib")
+    scaler = joblib.load(MODELS_DIR / f"{tag}_scaler_v1.joblib")
     return model, ols, scaler
 
 
@@ -83,9 +83,9 @@ def build_features(z_std):
     return df
 
 
-def forecast_pair(dep, indep):
+def forecast_with_artefacts(dep, indep, model, ols, scaler):
     """
-    Run inference for one pair.
+    Run inference for one pair using pre-loaded artefacts.
 
     Returns a dict with:
       signal_date  — last date in the feature window
@@ -93,9 +93,6 @@ def forecast_pair(dep, indep):
       forecast     — list of HORIZON predicted z_std values (h1 … h5)
       converging   — True if mean(|pred|) < |z_std|  (gate allows a trade)
     """
-    tag = f"{dep}_{indep}"
-    model, ols, scaler = load_artefacts(tag)
-
     log_close = load_log_close(dep, indep)
     spread    = log_close[dep] - ols["hedge_ratio"] * log_close[indep] - ols["intercept"]
     z_std     = (spread - scaler["mu"]) / scaler["sigma"]
@@ -120,6 +117,12 @@ def forecast_pair(dep, indep):
         "forecast":    preds.tolist(),
         "converging":  converging,
     }
+
+
+def forecast_pair(dep, indep):
+    """Load artefacts then run inference. Convenience wrapper around forecast_with_artefacts."""
+    model, ols, scaler = load_artefacts(f"{dep}_{indep}")
+    return forecast_with_artefacts(dep, indep, model, ols, scaler)
 
 
 def main():

@@ -19,6 +19,7 @@ No live downloads; no credentials required.
 import base64
 import io
 import sys
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import matplotlib
@@ -41,11 +42,38 @@ from phase3_strategy import (  # noqa: E402
     backtest, build_open_spread, build_spread_zscore,
     compute_metrics, extract_trade_log,
 )
-from utils import DATA_RAW  # noqa: E402
+from predict import load_artefacts, forecast_with_artefacts  # noqa: E402
+from utils import DATA_RAW, REPORTS_DIR  # noqa: E402
+
+# ---------------------------------------------------------------------------
+# Startup: load LSTM artefacts once for all selected pairs
+# ---------------------------------------------------------------------------
+
+_ARTEFACTS: dict[str, tuple] = {}  # tag -> (model, ols_params, scaler_params)
+_KNOWN_PAIRS: dict[str, tuple[str, str]] = {}  # "AMZN_META" -> ("AMZN", "META")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    sel_csv = REPORTS_DIR / "selected_pairs.csv"
+    if sel_csv.exists():
+        sel_df = pd.read_csv(sel_csv)
+        for _, row in sel_df.iterrows():
+            dep, indep = row["OLS_direction"].split("~")
+            tag = f"{dep}_{indep}"
+            _KNOWN_PAIRS[tag] = (dep, indep)
+            try:
+                _ARTEFACTS[tag] = load_artefacts(tag)
+                print(f"  Loaded artefacts for {tag}", flush=True)
+            except Exception as exc:
+                print(f"  Warning: could not load artefacts for {tag}: {exc}", file=sys.stderr)
+    yield
+
 
 app = FastAPI(
     title="Pairs Trading Analyser",
     description="Cointegration test, spread analysis and signal generation.",
+    lifespan=lifespan,
 )
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 
@@ -328,3 +356,47 @@ async def api_analyse(
     result.pop("chart_spread_b64", None)
     result.pop("chart_zscore_b64", None)
     return JSONResponse(content=result)
+
+
+@app.get("/api/predict/{pair}")
+async def api_predict(pair: str):
+    """
+    Return the latest 5-day z-score forecast and convergence gate decision
+    for a selected pair (e.g. AMZN_META or MSFT_AAPL).
+
+    Artefacts are loaded once at startup; this endpoint does not retrain.
+
+    Raises 404 if the pair is not in selected_pairs.csv or its artefacts
+    could not be loaded at startup.
+    """
+    if pair not in _KNOWN_PAIRS:
+        known = sorted(_KNOWN_PAIRS.keys())
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"Unknown pair '{pair}'. "
+                f"Available: {', '.join(known) if known else 'none loaded — run phase5_ml_spread.py first'}."
+            ),
+        )
+    if pair not in _ARTEFACTS:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Artefacts for '{pair}' could not be loaded. Run phase5_ml_spread.py first.",
+        )
+
+    dep, indep = _KNOWN_PAIRS[pair]
+    model, ols, scaler = _ARTEFACTS[pair]
+    try:
+        r = forecast_with_artefacts(dep, indep, model, ols, scaler)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    return JSONResponse(content={
+        "pair":        pair,
+        "dep":         r["dep"],
+        "indep":       r["indep"],
+        "signal_date": str(r["signal_date"].date()),
+        "z_std":       round(r["z_std"], 6),
+        "forecast":    [round(v, 6) for v in r["forecast"]],
+        "converging":  r["converging"],
+    })

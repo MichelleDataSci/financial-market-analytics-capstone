@@ -66,15 +66,22 @@
     </thead>
     <tbody>
       <tr>
-        <td>Engle-Granger ADF ({{ result.engle_granger.direction }})</td>
-        <td class="num">{{ "%.4f" | format(result.engle_granger.adf_stat) }}</td>
-        <td class="num">{{ "%.4f" | format(result.engle_granger.adf_pval) }}</td>
+        <td>Engle-Granger ({{ result.engle_granger.direction }})</td>
+        <td class="num">{{ "%.4f" | format(result.engle_granger.eg_stat) }}</td>
+        <td class="num">{{ "%.4f" | format(result.engle_granger.eg_pval) }}</td>
         <td class="{{ 'pass' if result.engle_granger.pass_5pct else 'fail' }}">
           {{ "Yes" if result.engle_granger.pass_5pct else "No" }}
         </td>
         <td class="{{ 'pass' if result.engle_granger.pass_10pct else 'fail' }}">
           {{ "Yes" if result.engle_granger.pass_10pct else "No" }}
         </td>
+      </tr>
+      <tr style="color:#888;font-size:0.85em;">
+        <td>ADF on OLS residuals <em>(direction selection only — not used for decision)</em></td>
+        <td class="num">{{ "%.4f" | format(result.engle_granger.adf_stat) }}</td>
+        <td class="num">{{ "%.4f" | format(result.engle_granger.adf_pval) }}</td>
+        <td>—</td>
+        <td>—</td>
       </tr>
       <tr>
         <td>Johansen trace (r=0)</td>

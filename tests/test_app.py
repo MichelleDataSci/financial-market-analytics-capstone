@@ -183,3 +183,12 @@ class TestCachedTickerPairs:
         data = resp.json()
         assert data["is_cointegrated"] is True
         assert data["is_borderline"] is True
+
+    def test_amzn_meta_html_shows_eg_pval(self):
+        """Results page EG row must show the engle_granger p-value (0.0143), not the ADF residual p-value."""
+        resp = client.post(
+            "/analyse",
+            data={"ticker1": "AMZN", "ticker2": "META"},
+        )
+        assert resp.status_code == 200
+        assert "0.0143" in resp.text

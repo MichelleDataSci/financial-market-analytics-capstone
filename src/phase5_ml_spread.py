@@ -1234,8 +1234,8 @@ def run_phase5_final_2026(dep, indep, tests_passed, refresh=False):
     n_entries_p4   = m_p4.get("Num_trades",   0)
     n_entries_lstm = m_lstm.get("Num_trades", 0)
     def _wr_str(wr, n_comp, n_entries):
-        if isinstance(wr, float) and np.isnan(wr):
-            return f"n/a (0/{n_entries} completed)"
+        if n_comp == 0 or (isinstance(wr, float) and np.isnan(wr)):
+            return f"n/a ({n_comp}/{n_entries} completed)"
         return f"{wr:.1f}% ({n_comp}/{n_entries} completed)"
     wr_p4_s   = _wr_str(wr_p4,   n_comp_p4,   n_entries_p4)
     wr_lstm_s = _wr_str(wr_lstm, n_comp_lstm, n_entries_lstm)
@@ -1565,10 +1565,12 @@ def main():
         for r in final_rows:
             wr_p = (f"{r['P4_CompletedWinRate']:.1f}%"
                     f"({r['P4_CompletedTrades']}/{r['P4_Entries']})"
-                    if r.get("P4_CompletedWinRate") is not None else "n/a")
+                    if r.get("P4_CompletedWinRate") is not None
+                    and r.get("P4_CompletedTrades", 0) > 0 else "n/a")
             wr_l = (f"{r['LSTM_CompletedWinRate']:.1f}%"
                     f"({r['LSTM_CompletedTrades']}/{r['LSTM_Entries']})"
-                    if r.get("LSTM_CompletedWinRate") is not None else "n/a")
+                    if r.get("LSTM_CompletedWinRate") is not None
+                    and r.get("LSTM_CompletedTrades", 0) > 0 else "n/a")
             print(f"  {r['Pair']:<12}  "
                   f"{r['Test_RMSE_2026']:>{col_w}.4f}  "
                   f"{r['P4_Sharpe']:>{col_w}.4f}  "

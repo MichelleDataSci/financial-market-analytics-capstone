@@ -184,31 +184,27 @@ def run_analysis(
     # Johansen (k_ar_diff=1 standard default)
     jo = johansen(log_df[[dep, indep]], det_order=0, k_ar_diff=1)
 
-    passes_5pct = (
-        eg["pass_5pct"]
-        or jo["trace_pass_5pct"]
-        or jo["maxeig_pass_5pct"]
-    )
-    passes_10pct_only = (not passes_5pct) and (
-        eg["pass_10pct"]
-        or jo["trace_pass_10pct"]
-        or jo["maxeig_pass_10pct"]
-    )
+    # Phase 3 rule: EG 5% OR Johansen trace 5% → cointegrated.
+    # Johansen trace 10% only → borderline (signals generated, labelled as such).
+    # Max-eigenvalue is displayed but not used in the decision.
+    passes_5pct       = eg["pass_5pct"] or jo["trace_pass_5pct"]
+    passes_10pct_only = (not passes_5pct) and jo["trace_pass_10pct"]
 
-    if eg["pass_5pct"] and (jo["trace_pass_5pct"] or jo["maxeig_pass_5pct"]):
-        summary = "Both EG and Johansen pass at 5% — strong cointegration evidence."
+    if eg["pass_5pct"] and jo["trace_pass_5pct"]:
+        summary = "Both EG and Johansen trace pass at 5% — strong cointegration evidence."
     elif eg["pass_5pct"]:
-        summary = "EG passes at 5%; Johansen inconclusive — borderline cointegration."
-    elif jo["trace_pass_5pct"] or jo["maxeig_pass_5pct"]:
-        summary = "Johansen passes at 5%; EG inconclusive — borderline cointegration."
+        summary = "EG passes at 5%; Johansen trace inconclusive — included."
+    elif jo["trace_pass_5pct"]:
+        summary = "Johansen trace passes at 5%; EG inconclusive — included."
     elif passes_10pct_only:
         summary = (
-            "Tests pass at 10% only — weak evidence. "
-            "Requires 5% significance; signals not generated."
+            "Johansen trace passes at 10% only — borderline. "
+            "Included per supervisor-approved selection rule; interpret results cautiously."
         )
     else:
-        summary = "No cointegration detected at 5% or 10% — signals not generated."
+        summary = "No cointegration detected (EG or Johansen trace at 5% or 10%) — signals not generated."
 
+    is_cointegrated = passes_5pct or passes_10pct_only
     result: dict = {
         "ticker1": ticker1,
         "ticker2": ticker2,
@@ -221,13 +217,14 @@ def run_analysis(
         },
         "engle_granger": eg,
         "johansen":      jo,
-        "is_cointegrated": passes_5pct,
+        "is_cointegrated":   is_cointegrated,
+        "is_borderline":     passes_10pct_only,
         "cointegration_summary": summary,
         "signals":   [],
         "n_signals": 0,
     }
 
-    if passes_5pct:
+    if is_cointegrated:
         spread, zscore = build_spread_zscore(log_df, dep, indep, hr, ic, LOOKBACK)
 
         spread_open = None

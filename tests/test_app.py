@@ -158,3 +158,28 @@ class TestApiAnalyseEndpoint:
         )
         assert resp.status_code == 422
         assert "Date" in resp.json()["detail"]
+
+
+class TestCachedTickerPairs:
+    """Integration tests using cached data from data/raw/."""
+
+    def test_amzn_meta_is_cointegrated(self):
+        """AMZN/META passes EG or Johansen trace at 5% on the full cached dataset."""
+        resp = client.post(
+            "/api/analyse",
+            data={"ticker1": "AMZN", "ticker2": "META"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["is_cointegrated"] is True
+
+    def test_msft_aapl_is_borderline(self):
+        """MSFT/AAPL passes Johansen trace at 10% only — borderline inclusion."""
+        resp = client.post(
+            "/api/analyse",
+            data={"ticker1": "MSFT", "ticker2": "AAPL"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["is_cointegrated"] is True
+        assert data["is_borderline"] is True

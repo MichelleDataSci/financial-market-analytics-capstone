@@ -185,6 +185,10 @@
     {% else %}
     <p style="color:#555;">No completed or open trades in this window.</p>
     {% endif %}
+    <p style="color:#777;font-size:0.82rem;margin-top:10px;">
+      <em>Exit Z uses a 30-day rolling z-score and trades execute at next open,
+      so a stop-loss exit can still show positive P&amp;L.</em>
+    </p>
 
   {% endif %}
 

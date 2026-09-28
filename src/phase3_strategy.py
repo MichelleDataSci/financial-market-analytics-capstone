@@ -34,7 +34,7 @@ import statsmodels.api as sm
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from utils import DATA_RAW, CHARTS_DIR, REPORTS_DIR
+from utils import DATA_RAW, CHARTS_DIR, REPORTS_DIR, TRAIN_END, TEST_START
 
 # ---------------------------------------------------------------------------
 # Shared strategy parameters
@@ -44,8 +44,6 @@ Z_EXIT       = 0.0      # close position when z crosses Z_EXIT
 Z_STOP       = 3.0      # stop loss when |z| exceeds Z_STOP in the loss direction
 LOOKBACK     = 30       # rolling window (trading days) for z-score
 COST_PER_LEG = 0.001    # 10 bps transaction cost per leg
-TRAIN_END    = "2021-12-31"
-TEST_START   = "2022-01-01"
 
 # ---------------------------------------------------------------------------
 # Helper functions

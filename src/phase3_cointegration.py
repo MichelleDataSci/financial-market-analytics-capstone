@@ -37,7 +37,7 @@ from itertools import combinations
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from utils import ALL_TICKERS, DATA_RAW, CHARTS_DIR, REPORTS_DIR
+from utils import ALL_TICKERS, DATA_RAW, CHARTS_DIR, REPORTS_DIR, TRAIN_END
 
 # ---------------------------------------------------------------------------
 # Helper functions -- module-level so they can be imported by other phases
@@ -547,6 +547,117 @@ def main():
     print(f"\n  Interpretation: Restricting to 2018-2022 removes the AI-driven structural")
     print(f"  break in NVDA from mid-2023, but the cointegrating relationship with peer")
     print(f"  stocks was also not established in the earlier period.")
+
+    # -------------------------------------------------------------------------
+    # 11b. TRAINING-WINDOW COINTEGRATION SCREEN (2018-2021 only)
+    #
+    #      Phase 3b splits data at TRAIN_END = 2021-12-31 / TEST_START = 2022-01-01.
+    #      The full-period screen above uses 2018-2025, which overlaps the test
+    #      window (2022-2025) — a look-ahead issue: pair selection has already
+    #      "seen" the test data.  This block reruns the same EG + Johansen tests
+    #      using only the training window so the selection decision is independent
+    #      of out-of-sample data.
+    #
+    #      Results are saved to cointegration_results_train_only.csv.
+    #      selected_pairs.csv (the downstream contract) is NOT changed here;
+    #      see the comparison table printed below.
+    # -------------------------------------------------------------------------
+    log_train = log_price_df.loc[:TRAIN_END]
+
+    print(f"\n{'='*65}")
+    print(f"TRAINING-WINDOW SCREEN (2018-01-01 to {TRAIN_END})")
+    print(f"{'='*65}")
+    print(f"  Window: {log_train.index[0].date()} to {log_train.index[-1].date()}  "
+          f"({len(log_train)} days)")
+
+    _lag_rows_train = []
+    for _a, _b in pairs:
+        _pair_diff = log_train[[_a, _b]].diff().dropna()
+        _sel = VAR(_pair_diff).select_order(maxlags=5)
+        _lag_rows_train.append(int(_sel.selected_orders["bic"]))
+    _bic_median_train = int(pd.Series(_lag_rows_train).median())
+    K_AR_DIFF_TRAIN   = max(1, _bic_median_train)
+    print(f"  BIC-median lag for training window: {K_AR_DIFF_TRAIN}")
+
+    train_records = []
+    for a, b in pairs:
+        log_a = log_train[a]
+        log_b = log_train[b]
+
+        (chosen_dir, hedge_ratio, intercept,
+         resid, adf_stat, adf_pval, dep, indep) = pick_direction(log_a, log_b, a, b)
+
+        eg_stat, eg_pval = engle_granger(log_train[dep], log_train[indep])
+        joh = johansen(log_train[[a, b]], k_ar_diff=K_AR_DIFF_TRAIN)
+
+        eg_pass     = eg_pval < 0.05
+        joh_pass_5  = joh["trace_pass_5pct"]
+        joh_pass_10 = joh["trace_pass_10pct"]
+
+        if eg_pass and joh_pass_5:
+            tests_passed = "Both"
+        elif eg_pass:
+            tests_passed = "EG only"
+        elif joh_pass_5:
+            tests_passed = "Johansen only"
+        elif joh_pass_10:
+            tests_passed = "Johansen 10%"
+        else:
+            tests_passed = "Neither"
+
+        selected_train = eg_pass or joh_pass_5 or joh_pass_10
+
+        train_records.append({
+            "Pair":                  f"{a}/{b}",
+            "OLS_direction":         chosen_dir,
+            "Hedge_ratio":           round(hedge_ratio, 4),
+            "EG_pval":               round(eg_pval, 4),
+            "EG_pass":               eg_pass,
+            "Johansen_trace_stat":   joh["trace_stat_r0"],
+            "Johansen_trace_crit_5": joh["trace_crit_r0_5pct"],
+            "Johansen_trace_pass_5": joh_pass_5,
+            "Johansen_trace_pass_10": joh_pass_10,
+            "Tests_passed":          tests_passed,
+            "Selected":              selected_train,
+        })
+
+    train_df     = pd.DataFrame(train_records)
+    train_csv    = REPORTS_DIR / "cointegration_results_train_only.csv"
+    train_df.to_csv(train_csv, index=False)
+    print(f"  Saved -> {train_csv}")
+
+    # Print comparison: full-period selection vs training-window selection
+    print(f"\n  {'Pair':<12}  {'Full 2018-2025':>15}  {'Train 2018-2021':>16}  {'Agreement':>10}")
+    print(f"  {'-'*60}")
+    for _, tr in train_df.iterrows():
+        pair = tr["Pair"]
+        full_row   = results_df[results_df["Pair"] == pair].iloc[0]
+        full_sel   = full_row["Selected"]
+        train_sel  = tr["Selected"]
+        full_tag   = full_row["Tests_passed"] if full_sel  else "—"
+        train_tag  = tr["Tests_passed"]       if train_sel else "—"
+        agree      = "SAME" if full_sel == train_sel else "DIFFERS"
+        print(f"  {pair:<12}  {full_tag:>15}  {train_tag:>16}  {agree:>10}")
+
+    train_selected = train_df[train_df["Selected"]]
+    full_selected_pairs  = set(results_df[results_df["Selected"]]["Pair"])
+    train_selected_pairs = set(train_selected["Pair"])
+    added   = train_selected_pairs - full_selected_pairs
+    dropped = full_selected_pairs  - train_selected_pairs
+    same    = full_selected_pairs  == train_selected_pairs
+
+    print(f"\n  Full-period selected : {sorted(full_selected_pairs)}")
+    print(f"  Train-only selected  : {sorted(train_selected_pairs)}")
+    if same:
+        print(f"\n  RESULT: Both screens select the SAME pairs.")
+        print(f"  The look-ahead does not change which pairs are taken forward.")
+    else:
+        print(f"\n  RESULT: Selection DIFFERS between the two windows.")
+        if added:
+            print(f"  Pairs added by training-only screen   : {sorted(added)}")
+        if dropped:
+            print(f"  Pairs dropped by training-only screen : {sorted(dropped)}")
+        print(f"  See comparison table above for details.")
 
     # -------------------------------------------------------------------------
     # 12. Export selected_pairs.csv -- contract for downstream phases

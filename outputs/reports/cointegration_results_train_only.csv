@@ -1,0 +1,16 @@
+Pair,OLS_direction,Hedge_ratio,EG_pval,EG_pass,Johansen_trace_stat,Johansen_trace_crit_5,Johansen_trace_pass_5,Johansen_trace_pass_10,Tests_passed,Selected
+MSFT/GOOGL,MSFT~GOOGL,1.1701,0.5083,False,5.1541,15.4943,False,False,Neither,False
+MSFT/NVDA,MSFT~NVDA,0.5986,0.5453,False,6.4021,15.4943,False,False,Neither,False
+MSFT/AAPL,AAPL~MSFT,1.1517,0.2926,False,6.9103,15.4943,False,False,Neither,False
+MSFT/AMZN,AMZN~MSFT,0.7325,0.4402,False,6.2559,15.4943,False,False,Neither,False
+MSFT/META,META~MSFT,0.6205,0.1239,False,9.3224,15.4943,False,False,Neither,False
+GOOGL/NVDA,GOOGL~NVDA,0.503,0.4909,False,5.3644,15.4943,False,False,Neither,False
+GOOGL/AAPL,AAPL~GOOGL,1.3833,0.6374,False,4.0279,15.4943,False,False,Neither,False
+GOOGL/AMZN,AMZN~GOOGL,0.8598,0.369,False,9.7932,15.4943,False,False,Neither,False
+GOOGL/META,META~GOOGL,0.803,0.152,False,10.8011,15.4943,False,False,Neither,False
+NVDA/AAPL,AAPL~NVDA,0.7495,0.554,False,4.7024,15.4943,False,False,Neither,False
+NVDA/AMZN,AMZN~NVDA,0.4719,0.2011,False,11.1799,15.4943,False,False,Neither,False
+NVDA/META,META~NVDA,0.4241,0.1634,False,11.7236,15.4943,False,False,Neither,False
+AAPL/AMZN,AMZN~AAPL,0.6286,0.0368,True,14.9118,15.4943,False,True,EG only,True
+AAPL/META,META~AAPL,0.5352,0.087,False,11.4598,15.4943,False,False,Neither,False
+AMZN/META,AMZN~META,1.0405,0.0232,True,14.8574,15.4943,False,True,EG only,True

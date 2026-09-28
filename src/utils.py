@@ -22,6 +22,10 @@ for _dir in (DATA_RAW, DATA_PROCESSED, CHARTS_DIR, REPORTS_DIR):
 START_DATE = "2018-01-01"
 END_DATE   = "2026-01-01"  # yfinance end is exclusive; use 2026-01-01 to include 2025-12-31
 
+# Phase 3b canonical train/test split (used in cointegration screening and strategy)
+TRAIN_END  = "2021-12-31"
+TEST_START = "2022-01-01"
+
 # ---------------------------------------------------------------------------
 # Ticker universe  — 6 large-cap S&P 500 tech stocks
 # ---------------------------------------------------------------------------

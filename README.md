@@ -69,11 +69,25 @@ python src/phase5_ml_spread.py
 ```
 
 **Notes:**
-- Phase 1 requires an internet connection. All subsequent phases run offline from `data/raw/`.
+- Phase 1 skips any ticker whose `data/raw/{ticker}_raw.csv` already exists. Pass `--refresh`
+  to force a full re-download: `python src/phase1_data.py --refresh`. An internet connection
+  is only required for tickers not already cached.
 - Phase 4 and 5 read 2026 prices from `data/raw/{ticker}_2026.csv` (cached on first run).
   Pass `--refresh` to Phase 4 to re-download: `python src/phase4_unseen.py --refresh`.
 - Phase 5 trains two LSTM models per pair and takes several minutes on CPU.
 - All scripts print UTF-8 output; no `-X utf8` flag is required on Windows.
+
+## Predict (inference only)
+
+Print the latest 5-day z-score forecast and convergence gate decision for each selected pair
+without retraining:
+
+```bash
+python src/predict.py
+```
+
+Reads saved artefacts from `models/` and cached raw prices from `data/raw/`. Requires
+`selected_pairs.csv` (produced by Phase 3a).
 
 ## Run tests
 

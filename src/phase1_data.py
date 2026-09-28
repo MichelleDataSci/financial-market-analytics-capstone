@@ -4,6 +4,7 @@ Downloads OHLC + Volume for 6 tech stocks plus S&P 500 and VIX,
 computes daily returns, adds time indicators, and saves a master CSV.
 """
 
+import argparse
 import yfinance as yf
 import pandas as pd
 import sys
@@ -12,6 +13,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from utils import ALL_TICKERS, BENCHMARK_TICKERS, TICKER_NAMES, START_DATE, END_DATE, DATA_RAW, DATA_PROCESSED
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--refresh", action="store_true",
+                    help="Re-download all raw CSVs even if they already exist")
+args = parser.parse_args()
+REFRESH = args.refresh
 
 # ---------------------------------------------------------------------------
 # Step 1 — Download OHLC + Volume for each stock
@@ -22,6 +29,10 @@ print("=" * 60)
 print(f"\nTickers  : {ALL_TICKERS}")
 print(f"Period   : {START_DATE}  to  {END_DATE}")
 print(f"Raw dir  : {DATA_RAW}")
+if REFRESH:
+    print("  --refresh: all raw CSVs will be re-downloaded.")
+else:
+    print("  Cached raw CSVs will be reused. Pass --refresh to re-download.")
 print()
 
 # ---------------------------------------------------------------------------
@@ -40,6 +51,14 @@ print()
 raw_frames = {}
 
 for ticker in ALL_TICKERS:
+    raw_path = DATA_RAW / f"{ticker}_raw.csv"
+    if raw_path.exists() and not REFRESH:
+        df = pd.read_csv(raw_path, index_col="Date", parse_dates=True)
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+        raw_frames[ticker] = df
+        print(f"  {ticker}: cached ({len(df)} rows) -> {raw_path.name}")
+        continue
     print(f"  Downloading {ticker} ...", end=" ")
     df = yf.download(ticker, start=START_DATE, end=END_DATE, auto_adjust=True, progress=False)
     if df.empty:
@@ -53,7 +72,6 @@ for ticker in ALL_TICKERS:
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
     df.index.name = "Date"
-    raw_path = DATA_RAW / f"{ticker}_raw.csv"
     df.to_csv(raw_path)
     raw_frames[ticker] = df
     print(f"{len(df)} rows saved -> {raw_path.name}")
@@ -82,19 +100,25 @@ print("Step 5 — Downloading S&P 500 and VIX benchmark series ...")
 
 benchmark_series = {}
 for label, symbol in BENCHMARK_TICKERS.items():
-    print(f"  Downloading {symbol} ({label}) ...", end=" ")
-    df_b = yf.download(symbol, start=START_DATE, end=END_DATE, auto_adjust=True, progress=False)
-    if df_b.empty:
-        raise RuntimeError(
-            f"yfinance returned no data for benchmark {symbol} ({label}) "
-            f"({START_DATE} to {END_DATE}). "
-            "Check the ticker symbol and your internet connection."
-        )
-    if isinstance(df_b.columns, pd.MultiIndex):
-        df_b.columns = df_b.columns.get_level_values(0)
-    df_b.index.name = "Date"
     raw_path = DATA_RAW / f"{label}_raw.csv"
-    df_b.to_csv(raw_path)
+    if raw_path.exists() and not REFRESH:
+        df_b = pd.read_csv(raw_path, index_col="Date", parse_dates=True)
+        if isinstance(df_b.columns, pd.MultiIndex):
+            df_b.columns = df_b.columns.get_level_values(0)
+        print(f"  {symbol} ({label}): cached ({len(df_b)} rows) -> {raw_path.name}")
+    else:
+        print(f"  Downloading {symbol} ({label}) ...", end=" ")
+        df_b = yf.download(symbol, start=START_DATE, end=END_DATE, auto_adjust=True, progress=False)
+        if df_b.empty:
+            raise RuntimeError(
+                f"yfinance returned no data for benchmark {symbol} ({label}) "
+                f"({START_DATE} to {END_DATE}). "
+                "Check the ticker symbol and your internet connection."
+            )
+        if isinstance(df_b.columns, pd.MultiIndex):
+            df_b.columns = df_b.columns.get_level_values(0)
+        df_b.index.name = "Date"
+        df_b.to_csv(raw_path)
     close_b = df_b["Close"]
     ret_b = (close_b - close_b.shift(1)) / close_b.shift(1) * 100
     benchmark_series[f"{label}_return"] = ret_b.rename(f"{label}_return")

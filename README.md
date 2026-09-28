@@ -29,6 +29,7 @@ The work is delivered as **Phases 1–6** per the phase breakdown: Phase 1 (data
 │   ├── phase3_strategy.py      # backtesting engine (all selected pairs)
 │   ├── phase4_unseen.py        # mean-reversion test on genuinely unseen 2026 data
 │   ├── phase5_ml_spread.py     # LSTM spread prediction + Step 8 2026 comparison
+│   ├── evaluate_gate.py        # gate classification metrics + feature importance
 │   └── utils.py                # shared constants & paths
 ├── app/
 │   ├── main.py                 # FastAPI application
@@ -78,6 +79,9 @@ python src/phase4_unseen.py
 
 # Phase 5 — LSTM spread prediction + Step 8 2026 comparison
 python src/phase5_ml_spread.py
+
+# Phase 5b — convergence gate classification metrics + feature importance
+python src/evaluate_gate.py
 ```
 
 **Notes:**
@@ -107,7 +111,7 @@ Reads saved artefacts from `models/` and cached raw prices from `data/raw/`. Req
 python -m pytest tests/ -v
 ```
 
-77 tests covering the backtesting engine (Phase 3b), Phase 5 utilities, predict utilities, and the FastAPI app.
+88 tests covering the backtesting engine (Phase 3b), Phase 5 utilities, predict utilities, convergence gate evaluation, and the FastAPI app.
 
 ## FastAPI deployment
 
@@ -214,6 +218,34 @@ The LSTM generalises poorly from 2018–2020 training to the 2022–2025 test re
 
 For AMZN/META, only 21.4% of 2026 bars were classified as converging, so the gate rejected both Phase 4 entries. This reflects that the LSTM predicted the spread would not converge on most bars — not a demonstration of LSTM skill, as the sample is too small to draw conclusions.
 
+### Convergence gate — binary classification evaluation (`evaluate_gate.py`)
+
+The convergence gate is evaluated as a binary classifier: predicted label = gate says converging; actual label = mean|z| over the next 5 days < |z| today. The final models (trained 2018–2024) are used for both periods; note that 2022–2024 is partially in-sample for those models.
+
+**Classification metrics** (n = bars in period; convergence_rate = fraction of bars where spread actually converged):
+
+| Pair | Period | n | Conv. rate | Model | Accuracy | Precision | Recall | F1 | ROC-AUC |
+|------|--------|---|------------|-------|----------|-----------|--------|----|---------|
+| AMZN/META | Holdout 2022–2025 | 1 003 | 0.52 | LSTM gate | 0.527 | 0.546 | 0.546 | 0.546 | 0.542 |
+| AMZN/META | Holdout 2022–2025 | 1 003 | 0.52 | Naive (always conv.) | 0.520 | 0.520 | 1.000 | 0.685 | 0.500 |
+| AMZN/META | Test 2026 | 139 | 0.56 | LSTM gate | 0.475 | 0.581 | 0.231 | 0.330 | 0.452 |
+| AMZN/META | Test 2026 | 139 | 0.56 | Naive (always conv.) | 0.561 | 0.561 | 1.000 | 0.719 | 0.500 |
+| MSFT/AAPL | Holdout 2022–2025 | 1 003 | 0.49 | LSTM gate | 0.556 | 0.549 | 0.579 | 0.563 | 0.582 |
+| MSFT/AAPL | Holdout 2022–2025 | 1 003 | 0.49 | Naive (always conv.) | 0.495 | 0.495 | 1.000 | 0.662 | 0.500 |
+| MSFT/AAPL | Test 2026 | 139 | 0.34 | LSTM gate | 0.381 | 0.321 | 0.745 | 0.449 | 0.537 |
+| MSFT/AAPL | Test 2026 | 139 | 0.34 | Naive (always conv.) | 0.338 | 0.338 | 1.000 | 0.505 | 0.500 |
+
+The LSTM gate achieves near-random discrimination (ROC-AUC 0.45–0.58). On the 2026 test, AMZN/META ROC-AUC falls below 0.5, meaning the gate's confidence score is negatively correlated with actual convergence. MSFT/AAPL shows a slight edge over naive on accuracy and ROC-AUC in both periods, but the margin is within noise given the sample sizes. Confusion matrices are saved to `outputs/charts/`.
+
+**Permutation feature importance** (mean ΔRMSE on 2026 test, 5 repeats):
+
+| Pair | z\_std | lag1 | lag2 | lag3 | roll\_std |
+|------|--------|------|------|------|-----------|
+| AMZN/META | +0.44 | +0.04 | −0.01 | +0.02 | −0.00 |
+| MSFT/AAPL | +0.63 | +0.05 | −0.00 | +0.02 | −0.00 |
+
+Current z-score (`z_std`) dominates — shuffling it roughly doubles the RMSE. Lagged values contribute marginally; `roll_std` is negligible. The model is effectively a function of the current spread level, which explains why it does not generalise well when the spread regime changes.
+
 ## Limitations
 
 1. **Look-ahead in pair selection.** The primary cointegration screen uses the full 2018–2025 dataset, which overlaps the Phase 3b test window (2022–2025). On the training window alone (2018–2021): AMZN/META passes EG (p = 0.023) but not Johansen trace at 5%; MSFT/AAPL fails both EG (p = 0.293) and Johansen; AAPL/AMZN passes EG (p = 0.037) but is not selected in the full-dataset screen. The supervisor-approved two-tier rule (agreed 2026-09-01) retains MSFT/AAPL as a borderline case on the full dataset, but this selection contains a look-ahead relative to the backtest period. See `cointegration_results_train_only.csv`.
@@ -245,6 +277,10 @@ For AMZN/META, only 21.4% of 2026 bars were classified as converging, so the gat
 | `outputs/reports/strategy_cross_pair_summary.csv` | Cross-pair strategy comparison with Sharpe CIs |
 | `outputs/reports/phase4_cross_pair_summary.csv` | Phase 4 signal summary and mean-reversion verdict |
 | `outputs/reports/phase5_cross_pair_final_summary.csv` | Phase 5 definitive 2026 LSTM vs Phase 4 baseline |
+| `outputs/reports/gate_metrics.csv` | LSTM gate classification metrics vs naive baseline (all pairs / periods) |
+| `outputs/reports/feature_importance_{pair}.csv` | Permutation feature importance per pair |
+| `outputs/charts/confusion_matrix_{pair}_{period}.png` | Confusion matrix per pair and evaluation period |
+| `outputs/charts/feature_importance_{pair}.png` | Feature importance bar chart per pair |
 | `models/{pair}_lstm_v1.keras` | Saved LSTM weights (versioned) |
 | `models/{pair}_ols_v1.joblib` | OLS hedge ratio and intercept |
 | `models/{pair}_scaler_v1.joblib` | Spread mean and std used for z-score normalisation |
@@ -264,6 +300,7 @@ All OHLCV data is sourced from [Yahoo Finance](https://finance.yahoo.com/) via t
 | [statsmodels](https://www.statsmodels.org/) | Engle-Granger `coint()`, Johansen test, VAR lag selection | https://www.statsmodels.org/ |
 | [TensorFlow / Keras](https://www.tensorflow.org/) | LSTM model training and inference | https://www.tensorflow.org/ |
 | [joblib](https://joblib.readthedocs.io/) | Artefact serialisation (`.joblib`) | https://joblib.readthedocs.io/ |
+| [scikit-learn](https://scikit-learn.org/) | Classification metrics (accuracy, precision, recall, F1, ROC-AUC) | https://scikit-learn.org/ |
 | [FastAPI](https://fastapi.tiangolo.com/) | Web application and REST API | https://fastapi.tiangolo.com/ |
 | [matplotlib](https://matplotlib.org/) | All charts and figures | https://matplotlib.org/ |
 | [seaborn](https://seaborn.pydata.org/) | Heatmap and styled plots | https://seaborn.pydata.org/ |

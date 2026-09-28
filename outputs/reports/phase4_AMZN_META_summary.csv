@@ -1,2 +1,2 @@
 Pair,Tests_passed,Hedge_ratio,Intercept,R2_training,Norm_mu,Norm_sigma,Test_days,Z_min,Z_max,Z_mean,Z_std,Long_signals,Short_signals,Total_signals,Days_in_mkt,Pct_in_mkt,Verdict
-AMZN/META,Both,0.597664,1.532298,0.7866,-0.035929,0.060724,145,-1.1505,5.425,2.0026,1.5844,0,2,2,98,67.59,WEAK mean reversion — spread has drifted from equilibrium
+AMZN/META,Both,0.597664,1.532298,0.7866,-0.035929,0.060724,145,-1.1428,5.4328,2.0103,1.5844,0,2,2,98,67.59,WEAK mean reversion — spread has drifted from equilibrium

@@ -67,9 +67,11 @@ Cross-pair:
 
 import os
 import sys
+sys.stdout.reconfigure(encoding="utf-8")
 import warnings
 import numpy as np
 import pandas as pd
+import joblib
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -88,7 +90,7 @@ from tensorflow import keras
 from tensorflow.keras import layers, callbacks
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from utils import DATA_RAW, CHARTS_DIR, REPORTS_DIR
+from utils import DATA_RAW, CHARTS_DIR, REPORTS_DIR, MODELS_DIR, load_or_download_2026
 from phase3_strategy import (
     load_prices, build_open_spread, backtest, compute_metrics,
     extract_trade_log,
@@ -98,8 +100,9 @@ from phase3_strategy import (
 # Reproducibility
 # ---------------------------------------------------------------------------
 SEED = 42
-np.random.seed(SEED)
-tf.random.set_seed(SEED)
+# tf.keras.utils.set_random_seed sets TF, NumPy, and Python random seeds.
+# enable_op_determinism() is called once in main() before any computation.
+tf.keras.utils.set_random_seed(SEED)
 
 # ---------------------------------------------------------------------------
 # LSTM chronological splits
@@ -313,6 +316,76 @@ def evaluate_predictions(y_true, y_pred):
     return result
 
 
+def persistence_baseline(X, y_true):
+    """
+    Naive persistence baseline: predict z_t (last input value) for all h.
+
+    X shape: (n_samples, seq_len, n_features); z_std is feature 0.
+    y_true shape: (n_samples, horizon).
+    y_persist[i, h] = X[i, -1, 0] for all h (last observed z_std).
+    Returns dict with Persist_RMSE_h{1..5}, Persist_MAE_h{1..5},
+    Persist_RMSE_overall, Persist_MAE_overall.
+    """
+    y_persist = np.repeat(X[:, -1, 0:1], y_true.shape[1], axis=1)
+    result = {}
+    for h in range(y_true.shape[1]):
+        err = y_true[:, h] - y_persist[:, h]
+        result[f"Persist_RMSE_h{h+1}"] = float(np.sqrt(np.mean(err ** 2)))
+        result[f"Persist_MAE_h{h+1}"]  = float(np.mean(np.abs(err)))
+    all_err = (y_true - y_persist).ravel()
+    result["Persist_RMSE_overall"] = float(np.sqrt(np.mean(all_err ** 2)))
+    result["Persist_MAE_overall"]  = float(np.mean(np.abs(all_err)))
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Model artefact persistence (Task 3)
+# ---------------------------------------------------------------------------
+
+def save_artifacts(tag, model, hr, ic, mu, sigma):
+    """
+    Save final LSTM model and fitted OLS/scaler parameters to models/.
+
+    Files written:
+      models/{tag}_lstm_final.keras
+      models/{tag}_ols_params.joblib   — {"hedge_ratio": hr, "intercept": ic}
+      models/{tag}_scaler_params.joblib — {"mu": mu, "sigma": sigma}
+    """
+    model_path  = MODELS_DIR / f"{tag}_lstm_final.keras"
+    ols_path    = MODELS_DIR / f"{tag}_ols_params.joblib"
+    scaler_path = MODELS_DIR / f"{tag}_scaler_params.joblib"
+    model.save(model_path)
+    joblib.dump({"hedge_ratio": hr, "intercept": ic}, ols_path)
+    joblib.dump({"mu": mu, "sigma": sigma}, scaler_path)
+    print(f"  Artefacts saved:")
+    print(f"    {model_path}")
+    print(f"    {ols_path}")
+    print(f"    {scaler_path}")
+    return model_path, ols_path, scaler_path
+
+
+def load_artifacts(tag):
+    """
+    Load saved artefacts for a pair tag (e.g. 'AMZN_META').
+    Returns (model, ols_params, scaler_params) where:
+      ols_params    = {"hedge_ratio": float, "intercept": float}
+      scaler_params = {"mu": float, "sigma": float}
+    Raises FileNotFoundError if any file is missing.
+    """
+    model_path  = MODELS_DIR / f"{tag}_lstm_final.keras"
+    ols_path    = MODELS_DIR / f"{tag}_ols_params.joblib"
+    scaler_path = MODELS_DIR / f"{tag}_scaler_params.joblib"
+    for p in (model_path, ols_path, scaler_path):
+        if not p.exists():
+            raise FileNotFoundError(
+                f"Artefact not found: {p}\n"
+                "Run phase5_ml_spread.py first to generate saved models.")
+    model       = keras.models.load_model(model_path)
+    ols_params    = joblib.load(ols_path)
+    scaler_params = joblib.load(scaler_path)
+    return model, ols_params, scaler_params
+
+
 # ---------------------------------------------------------------------------
 # Step 6b: Per-trade win rate (uses extract_trade_log from phase3_strategy)
 # ---------------------------------------------------------------------------
@@ -488,26 +561,26 @@ def backtest_lstm_enhanced(zscore_series, spread_cl, spread_op, conv_dict,
     }, index=zscore_series.index)
 
 
-def download_2026_prices(dep, indep, start, end_exclusive):
+def download_2026_prices(dep, indep, start, end_exclusive, refresh=False):
     """
-    Download 2026 Close and Open prices for both tickers via yfinance.
+    Load 2026 Close and Open prices for both tickers.
+    Reads from data/raw/{ticker}_2026.csv if it exists; downloads and caches
+    on first call or when refresh=True.
     Returns (close_df, open_df, log_close, log_open) or None on failure.
-    Mirrors the download logic in phase4_unseen.py.
     """
     close_px, open_px = {}, {}
     for ticker in [dep, indep]:
-        print(f"    Downloading {ticker} ...", end=" ")
-        df = yf.download(ticker, start=start, end=end_exclusive,
-                         auto_adjust=True, progress=False)
-        if df.empty:
-            print("WARNING: no data returned.")
+        try:
+            df = load_or_download_2026(ticker, start=start,
+                                        end_exclusive=end_exclusive,
+                                        refresh=refresh)
+        except RuntimeError as e:
+            print(f"    WARNING: {e}")
             return None
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
-        df.index.name = "Date"
+        source = "cache" if not refresh else "download"
+        print(f"    {ticker}: {len(df)} trading days ({source})")
         close_px[ticker] = df["Close"]
         open_px[ticker]  = df["Open"]
-        print(f"{len(df)} trading days")
 
     close_df = pd.DataFrame(close_px).dropna()
     open_df  = pd.DataFrame(open_px).reindex(close_df.index).dropna()
@@ -582,8 +655,7 @@ def run_phase5_pair(dep, indep, tests_passed):
     print(f"\n  Step 5 – LSTM training "
           f"(units={LSTM_UNITS_1}/{LSTM_UNITS_2}, dropout={DROPOUT}, "
           f"lr={LEARNING_RATE}, patience={PATIENCE})...")
-    tf.random.set_seed(SEED)
-    np.random.seed(SEED)
+    tf.keras.utils.set_random_seed(SEED)
     model = build_lstm(n_features)
     es    = callbacks.EarlyStopping(monitor="val_loss", patience=PATIENCE,
                                      restore_best_weights=True, verbose=0)
@@ -604,14 +676,23 @@ def run_phase5_pair(dep, indep, tests_passed):
     # Step 6: Evaluate on 2022-2025 test set
     # -----------------------------------------------------------------------
     y_pred_te = model.predict(X_te, verbose=0)
-    eval_dict = evaluate_predictions(y_te, y_pred_te)
+    eval_dict   = evaluate_predictions(y_te, y_pred_te)
+    persist_dict = persistence_baseline(X_te, y_te)
     print(f"\n  Step 6 – test evaluation on {ML_TEST_START}–{idx_te[-1].date()} "
           f"[out-of-sample, in z_std units]:")
+    print(f"    {'Horizon':<10}  {'LSTM RMSE':>10}  {'LSTM MAE':>9}  "
+          f"{'Persist RMSE':>13}  {'Persist MAE':>12}")
     for h in range(HORIZON):
-        print(f"    h+{h+1}: RMSE={eval_dict[f'RMSE_h{h+1}']:.4f}  "
-              f"MAE={eval_dict[f'MAE_h{h+1}']:.4f}")
-    print(f"    Overall: RMSE={eval_dict['RMSE_overall']:.4f}  "
-          f"MAE={eval_dict['MAE_overall']:.4f}")
+        print(f"    h+{h+1:<7}  "
+              f"{eval_dict[f'RMSE_h{h+1}']:>10.4f}  "
+              f"{eval_dict[f'MAE_h{h+1}']:>9.4f}  "
+              f"{persist_dict[f'Persist_RMSE_h{h+1}']:>13.4f}  "
+              f"{persist_dict[f'Persist_MAE_h{h+1}']:>12.4f}")
+    print(f"    {'Overall':<10}  "
+          f"{eval_dict['RMSE_overall']:>10.4f}  "
+          f"{eval_dict['MAE_overall']:>9.4f}  "
+          f"{persist_dict['Persist_RMSE_overall']:>13.4f}  "
+          f"{persist_dict['Persist_MAE_overall']:>12.4f}")
 
     # Save metrics CSV
     # Columns: Dataset distinguishes val (2021, early-stopping criterion) from
@@ -620,18 +701,24 @@ def run_phase5_pair(dep, indep, tests_passed):
                      "Dataset": f"test ({ML_TEST_START}–{idx_te[-1].date()})",
                      "Horizon": f"h+{h+1}",
                      "RMSE": round(eval_dict[f"RMSE_h{h+1}"], 4),
-                     "MAE":  round(eval_dict[f"MAE_h{h+1}"],  4)}
+                     "MAE":  round(eval_dict[f"MAE_h{h+1}"],  4),
+                     "Persist_RMSE": round(persist_dict[f"Persist_RMSE_h{h+1}"], 4),
+                     "Persist_MAE":  round(persist_dict[f"Persist_MAE_h{h+1}"],  4)}
                     for h in range(HORIZON)]
     metrics_rows.append({"Pair": f"{dep}/{indep}",
                          "Dataset": f"test ({ML_TEST_START}–{idx_te[-1].date()})",
                          "Horizon": "Overall",
                          "RMSE": round(eval_dict["RMSE_overall"], 4),
-                         "MAE":  round(eval_dict["MAE_overall"],  4)})
+                         "MAE":  round(eval_dict["MAE_overall"],  4),
+                         "Persist_RMSE": round(persist_dict["Persist_RMSE_overall"], 4),
+                         "Persist_MAE":  round(persist_dict["Persist_MAE_overall"],  4)})
     metrics_rows.append({"Pair": f"{dep}/{indep}",
                          "Dataset": f"val ({ML_VAL_START}–{ML_VAL_END})",
                          "Horizon": "Overall",
                          "RMSE": round(val_rmse, 4),
-                         "MAE":  None})   # not separately computed for val
+                         "MAE":  None,
+                         "Persist_RMSE": None,
+                         "Persist_MAE":  None})
     pd.DataFrame(metrics_rows).to_csv(
         REPORTS_DIR / f"phase5_{tag}_lstm_metrics.csv", index=False)
     print(f"  Metrics CSV saved -> phase5_{tag}_lstm_metrics.csv")
@@ -823,7 +910,7 @@ def run_phase5_pair(dep, indep, tests_passed):
 # Step 8b: Final 2026 evaluation — separate LSTM model trained on 2018-2024
 # ---------------------------------------------------------------------------
 
-def run_phase5_final_2026(dep, indep, tests_passed):
+def run_phase5_final_2026(dep, indep, tests_passed, refresh=False):
     """
     Train a fresh LSTM on 2018-2024 (val 2025) and evaluate on 2026.
     All pre-processing (OLS, scaler, feature construction) uses only data
@@ -889,8 +976,7 @@ def run_phase5_final_2026(dep, indep, tests_passed):
     # 5. Train LSTM
     # ------------------------------------------------------------------
     print(f"  Training final LSTM (patience={PATIENCE}) ...")
-    tf.random.set_seed(SEED)
-    np.random.seed(SEED)
+    tf.keras.utils.set_random_seed(SEED)
     model_f = build_lstm(n_features)
     es_f    = callbacks.EarlyStopping(monitor="val_loss", patience=PATIENCE,
                                         restore_best_weights=True, verbose=0)
@@ -908,10 +994,27 @@ def run_phase5_final_2026(dep, indep, tests_passed):
           f"[2025 validation, z_std units]")
 
     # ------------------------------------------------------------------
+    # 5b. Save artefacts and verify round-trip load
+    # ------------------------------------------------------------------
+    save_artifacts(tag, model_f, hr_f, ic_f, mu_f, sigma_f)
+
+    # Verify: load back and compare predictions on one val sample
+    _model_chk, _ols_chk, _scl_chk = load_artifacts(tag)
+    _pred_orig = model_f.predict(X_va_f[:1], verbose=0)
+    _pred_load = _model_chk.predict(X_va_f[:1], verbose=0)
+    _max_diff  = float(np.max(np.abs(_pred_orig - _pred_load)))
+    assert _max_diff < 1e-5, f"Load round-trip mismatch: max diff={_max_diff}"
+    assert _ols_chk["hedge_ratio"] == hr_f and _ols_chk["intercept"] == ic_f
+    assert _scl_chk["mu"] == mu_f and _scl_chk["sigma"] == sigma_f
+    print(f"  Load round-trip verified (max pred diff={_max_diff:.2e})")
+    del _model_chk, _ols_chk, _scl_chk, _pred_orig, _pred_load
+
+    # ------------------------------------------------------------------
     # 6. Download 2026 data and evaluate LSTM on 2026
     # ------------------------------------------------------------------
     print(f"\n  Downloading 2026 data ...")
-    data_2026 = download_2026_prices(dep, indep, P4_TEST_START, P4_TEST_END_EX)
+    data_2026 = download_2026_prices(dep, indep, P4_TEST_START, P4_TEST_END_EX,
+                                      refresh=refresh)
     if data_2026 is None:
         print("  ERROR: 2026 data unavailable — aborting final 2026 evaluation.")
         return None
@@ -952,8 +1055,9 @@ def run_phase5_final_2026(dep, indep, tests_passed):
     X_te_f   = X_te_all[mask_te]
     y_te_f   = y_te_all[mask_te]
     idx_te_f = idx_te_all[mask_te]
-    y_pred_f = model_f.predict(X_te_f, verbose=0)
-    eval_f   = evaluate_predictions(y_te_f, y_pred_f)
+    y_pred_f     = model_f.predict(X_te_f, verbose=0)
+    eval_f       = evaluate_predictions(y_te_f, y_pred_f)
+    persist_f    = persistence_baseline(X_te_f, y_te_f)
 
     test_rmse_f  = eval_f["RMSE_overall"]
     test_mae_f   = eval_f["MAE_overall"]
@@ -961,28 +1065,42 @@ def run_phase5_final_2026(dep, indep, tests_passed):
 
     print(f"\n  2026 forecast evaluation (in z_std units):")
     print(f"    Val RMSE (2025, early-stopping):   {val_rmse_f_r}")
+    print(f"    {'Horizon':<10}  {'LSTM RMSE':>10}  {'LSTM MAE':>9}  "
+          f"{'Persist RMSE':>13}  {'Persist MAE':>12}")
     for h in range(HORIZON):
-        print(f"    h+{h+1}: RMSE={eval_f[f'RMSE_h{h+1}']:.4f}  "
-              f"MAE={eval_f[f'MAE_h{h+1}']:.4f}")
-    print(f"    Overall: RMSE={test_rmse_f:.4f}  MAE={test_mae_f:.4f}")
+        print(f"    h+{h+1:<7}  "
+              f"{eval_f[f'RMSE_h{h+1}']:>10.4f}  "
+              f"{eval_f[f'MAE_h{h+1}']:>9.4f}  "
+              f"{persist_f[f'Persist_RMSE_h{h+1}']:>13.4f}  "
+              f"{persist_f[f'Persist_MAE_h{h+1}']:>12.4f}")
+    print(f"    {'Overall':<10}  "
+          f"{test_rmse_f:>10.4f}  "
+          f"{test_mae_f:>9.4f}  "
+          f"{persist_f['Persist_RMSE_overall']:>13.4f}  "
+          f"{persist_f['Persist_MAE_overall']:>12.4f}")
 
     # Save final LSTM metrics CSV (distinguishes 2025-val vs 2026-test)
     fin_metrics_rows = [
         {"Pair": f"{dep}/{indep}",
          "Dataset": f"val ({FINAL_VAL_START}–{FINAL_VAL_END})",
-         "Horizon": "Overall", "RMSE": val_rmse_f_r, "MAE": None},
+         "Horizon": "Overall", "RMSE": val_rmse_f_r, "MAE": None,
+         "Persist_RMSE": None, "Persist_MAE": None},
     ] + [
         {"Pair": f"{dep}/{indep}",
          "Dataset": f"test ({P4_TEST_START}–{P4_TEST_END})",
          "Horizon": f"h+{h+1}",
          "RMSE": round(eval_f[f"RMSE_h{h+1}"], 4),
-         "MAE":  round(eval_f[f"MAE_h{h+1}"],  4)}
+         "MAE":  round(eval_f[f"MAE_h{h+1}"],  4),
+         "Persist_RMSE": round(persist_f[f"Persist_RMSE_h{h+1}"], 4),
+         "Persist_MAE":  round(persist_f[f"Persist_MAE_h{h+1}"],  4)}
         for h in range(HORIZON)
     ] + [
         {"Pair": f"{dep}/{indep}",
          "Dataset": f"test ({P4_TEST_START}–{P4_TEST_END})",
          "Horizon": "Overall",
-         "RMSE": round(test_rmse_f, 4), "MAE": round(test_mae_f, 4)},
+         "RMSE": round(test_rmse_f, 4), "MAE": round(test_mae_f, 4),
+         "Persist_RMSE": round(persist_f["Persist_RMSE_overall"], 4),
+         "Persist_MAE":  round(persist_f["Persist_MAE_overall"],  4)},
     ]
     pd.DataFrame(fin_metrics_rows).to_csv(
         REPORTS_DIR / f"phase5_{tag}_final_lstm_metrics.csv", index=False)
@@ -1092,7 +1210,7 @@ def run_phase5_final_2026(dep, indep, tests_passed):
     # 10. Report comparison
     # ------------------------------------------------------------------
     REPORT_KEYS = [
-        ("Num_trades",            "Trades"),
+        ("Num_trades",            "Entries (incl. open)"),
         ("Total_PnL",             "Total net P&L"),
         ("Ann_PnL",               "Annual P&L"),
         ("Sharpe_ratio",          "Sharpe ratio"),
@@ -1113,14 +1231,16 @@ def run_phase5_final_2026(dep, indep, tests_passed):
         fmt_b = f"{vb:.4f}" if isinstance(vb, float) else str(vb)
         fmt_l = f"{vl:.4f}" if isinstance(vl, float) else str(vl)
         print(row_fmt.format(label, fmt_b, fmt_l))
-    # Win rate + completed-trade count (denominator)
-    wr_p4_s   = f"{wr_p4:.1f}%" if not (isinstance(wr_p4, float) and
-                                          np.isnan(wr_p4)) else "n/a"
-    wr_lstm_s = f"{wr_lstm:.1f}%" if not (isinstance(wr_lstm, float) and
-                                           np.isnan(wr_lstm)) else "n/a"
-    print(row_fmt.format("Completed-trade win rate", wr_p4_s, wr_lstm_s))
-    print(row_fmt.format("Completed trades (denom.)",
-                         str(n_comp_p4), str(n_comp_lstm)))
+    # Win rate: show "X% (n_completed/n_entries)" so the denominator is always visible
+    n_entries_p4   = m_p4.get("Num_trades",   0)
+    n_entries_lstm = m_lstm.get("Num_trades", 0)
+    def _wr_str(wr, n_comp, n_entries):
+        if n_comp == 0 or (isinstance(wr, float) and np.isnan(wr)):
+            return f"n/a ({n_comp}/{n_entries} completed)"
+        return f"{wr:.1f}% ({n_comp}/{n_entries} completed)"
+    wr_p4_s   = _wr_str(wr_p4,   n_comp_p4,   n_entries_p4)
+    wr_lstm_s = _wr_str(wr_lstm, n_comp_lstm, n_entries_lstm)
+    print(row_fmt.format("Win rate (completed only)", wr_p4_s, wr_lstm_s))
     print()
     print(f"    Signal counts:")
     blocked = (n_long_p4 + n_short_p4) - (n_long_lstm + n_short_lstm)
@@ -1184,13 +1304,13 @@ def run_phase5_final_2026(dep, indep, tests_passed):
     ax3a = fig3.add_subplot(gs3[0])
     ax3a.plot(bt_p4.index,   bt_p4["cum_pnl"],  color="steelblue", lw=1.2,
               label=(f"Phase 4 baseline: Sharpe={m_p4['Sharpe_ratio']:.2f}  "
-                     f"Trades={m_p4['Num_trades']}  "
-                     f"WinRate={wr_p4_s}  "
+                     f"Entries={m_p4['Num_trades']}  "
+                     f"WinRate(completed)={wr_p4_s}  "
                      f"P&L={m_p4['Total_PnL']:.4f}"))
     ax3a.plot(bt_lstm.index, bt_lstm["cum_pnl"], color="darkorange", lw=1.2, ls="--",
               label=(f"LSTM-enhanced: Sharpe={m_lstm['Sharpe_ratio']:.2f}  "
-                     f"Trades={m_lstm['Num_trades']}  "
-                     f"WinRate={wr_lstm_s}  "
+                     f"Entries={m_lstm['Num_trades']}  "
+                     f"WinRate(completed)={wr_lstm_s}  "
                      f"P&L={m_lstm['Total_PnL']:.4f}"))
     ax3a.axhline(0, color="grey", lw=0.5, ls=":")
     ax3a.set_ylabel("Cumulative net P&L (log-price units)", fontsize=9)
@@ -1266,22 +1386,22 @@ def run_phase5_final_2026(dep, indep, tests_passed):
         "P4_short_signals": n_short_p4,
         "LSTM_long_signals":  n_long_lstm,
         "LSTM_short_signals": n_short_lstm,
-        "P4_Sharpe":   m_p4.get("Sharpe_ratio"),
-        "P4_Trades":   m_p4.get("Num_trades"),
-        "P4_PnL":      m_p4.get("Total_PnL"),
-        "P4_MaxDD":    m_p4.get("Max_drawdown"),
-        "P4_WinRate":        round(wr_p4, 1) if not np.isnan(wr_p4) else None,
-        "P4_CompletedTrades": n_comp_p4,
-        "P4_AvgTrade":       m_p4.get("Avg_trade_PnL"),
-        "P4_InMkt":          m_p4.get("Pct_in_market"),
-        "LSTM_Sharpe":       m_lstm.get("Sharpe_ratio"),
-        "LSTM_Trades":       m_lstm.get("Num_trades"),
-        "LSTM_PnL":          m_lstm.get("Total_PnL"),
-        "LSTM_MaxDD":        m_lstm.get("Max_drawdown"),
-        "LSTM_WinRate":      round(wr_lstm, 1) if not np.isnan(wr_lstm) else None,
-        "LSTM_CompletedTrades": n_comp_lstm,
-        "LSTM_AvgTrade":     m_lstm.get("Avg_trade_PnL"),
-        "LSTM_InMkt":        m_lstm.get("Pct_in_market"),
+        "P4_Sharpe":              m_p4.get("Sharpe_ratio"),
+        "P4_Entries":             m_p4.get("Num_trades"),
+        "P4_PnL":                 m_p4.get("Total_PnL"),
+        "P4_MaxDD":               m_p4.get("Max_drawdown"),
+        "P4_CompletedWinRate":    round(wr_p4, 1) if not np.isnan(wr_p4) else None,
+        "P4_CompletedTrades":     n_comp_p4,
+        "P4_AvgTrade":            m_p4.get("Avg_trade_PnL"),
+        "P4_InMkt":               m_p4.get("Pct_in_market"),
+        "LSTM_Sharpe":            m_lstm.get("Sharpe_ratio"),
+        "LSTM_Entries":           m_lstm.get("Num_trades"),
+        "LSTM_PnL":               m_lstm.get("Total_PnL"),
+        "LSTM_MaxDD":             m_lstm.get("Max_drawdown"),
+        "LSTM_CompletedWinRate":  round(wr_lstm, 1) if not np.isnan(wr_lstm) else None,
+        "LSTM_CompletedTrades":   n_comp_lstm,
+        "LSTM_AvgTrade":          m_lstm.get("Avg_trade_PnL"),
+        "LSTM_InMkt":             m_lstm.get("Pct_in_market"),
     }
 
 
@@ -1340,6 +1460,16 @@ def count_signals_lstm_gated(z_series, conv_dict,
 # ---------------------------------------------------------------------------
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Phase 5: LSTM spread prediction")
+    parser.add_argument("--refresh", action="store_true",
+                        help="Re-download 2026 data and overwrite cached files in data/raw/")
+    args = parser.parse_args()
+
+    # Force deterministic TF ops so reruns produce identical weights.
+    # Must be called before any TF computation.
+    tf.config.experimental.enable_op_determinism()
+
     print("=" * 65)
     print("PHASE 5 – MACHINE LEARNING FOR PREDICTING SPREAD")
     print("=" * 65)
@@ -1413,7 +1543,8 @@ def main():
     for _, row in sel_df.iterrows():
         dep, indep = row["OLS_direction"].split("~")
         result = run_phase5_final_2026(
-            dep=dep, indep=indep, tests_passed=row["Tests_passed"])
+            dep=dep, indep=indep, tests_passed=row["Tests_passed"],
+            refresh=args.refresh)
         if result is not None:
             final_rows.append(result)
 
@@ -1427,23 +1558,28 @@ def main():
         print(f"{'='*65}")
         col_w = 12
         hdr2 = (f"  {'Pair':<12}  {'TestRMSE':>{col_w}}  {'P4 Sharpe':>{col_w}}  "
-                f"{'LSTM Sharpe':>{col_w}}  {'P4 Trades':>{col_w}}  "
-                f"{'LSTM Trades':>{col_w}}  {'P4 WinRate':>{col_w}}  "
-                f"{'LSTM WinRate':>{col_w}}")
+                f"{'LSTM Sharpe':>{col_w}}  {'P4 Entries':>{col_w}}  "
+                f"{'LSTM Entries':>{col_w}}  {'P4 WinRate*':>{col_w}}  "
+                f"{'LSTM WinRate*':>{col_w}}")
         print(hdr2)
         print("-" * len(hdr2))
         for r in final_rows:
-            wr_p  = f"{r['P4_WinRate']:.1f}%" if r.get("P4_WinRate") is not None \
-                    else "n/a"
-            wr_l  = f"{r['LSTM_WinRate']:.1f}%" if r.get("LSTM_WinRate") is not None \
-                    else "n/a"
+            wr_p = (f"{r['P4_CompletedWinRate']:.1f}%"
+                    f"({r['P4_CompletedTrades']}/{r['P4_Entries']})"
+                    if r.get("P4_CompletedWinRate") is not None
+                    and r.get("P4_CompletedTrades", 0) > 0 else "n/a")
+            wr_l = (f"{r['LSTM_CompletedWinRate']:.1f}%"
+                    f"({r['LSTM_CompletedTrades']}/{r['LSTM_Entries']})"
+                    if r.get("LSTM_CompletedWinRate") is not None
+                    and r.get("LSTM_CompletedTrades", 0) > 0 else "n/a")
             print(f"  {r['Pair']:<12}  "
                   f"{r['Test_RMSE_2026']:>{col_w}.4f}  "
                   f"{r['P4_Sharpe']:>{col_w}.4f}  "
                   f"{r['LSTM_Sharpe']:>{col_w}.4f}  "
-                  f"{r['P4_Trades']:>{col_w}}  "
-                  f"{r['LSTM_Trades']:>{col_w}}  "
+                  f"{r['P4_Entries']:>{col_w}}  "
+                  f"{r['LSTM_Entries']:>{col_w}}  "
                   f"{wr_p:>{col_w}}  {wr_l:>{col_w}}")
+        print("  * Win rate over completed (closed) trades only; open trades excluded.")
         print(f"\n  Saved -> {final_csv.name}")
 
     print(f"\n{'='*65}")

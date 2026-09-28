@@ -27,6 +27,13 @@ from phase5_ml_spread import (
     persistence_baseline,
     compute_win_rate,
     ML_TRAIN_END,
+    ML_VAL_START,
+    ML_VAL_END,
+    ML_TEST_START,
+    FINAL_TRAIN_END,
+    FINAL_VAL_START,
+    FINAL_VAL_END,
+    P4_TEST_START,
     SEQ_LEN,
     HORIZON,
 )
@@ -331,3 +338,44 @@ class TestComputeWinRate:
         bt_df = _make_bt_df(pos, idx)
         wr, n_comp, _ = compute_win_rate(bt_df)
         assert n_comp == 1
+
+
+# ---------------------------------------------------------------------------
+# 6. Date-window chronology — both experiments use the actual constants
+# ---------------------------------------------------------------------------
+
+class TestDateWindows:
+
+    def test_historical_splits_are_chronological(self):
+        """Historical experiment: train < val < test, no gaps or overlaps."""
+        assert ML_TRAIN_END < ML_VAL_START, (
+            f"Val start {ML_VAL_START} must be after train end {ML_TRAIN_END}")
+        assert ML_VAL_END < ML_TEST_START, (
+            f"Test start {ML_TEST_START} must be after val end {ML_VAL_END}")
+
+    def test_historical_splits_do_not_overlap(self):
+        train_end = pd.Timestamp(ML_TRAIN_END)
+        val_start = pd.Timestamp(ML_VAL_START)
+        val_end   = pd.Timestamp(ML_VAL_END)
+        test_start = pd.Timestamp(ML_TEST_START)
+        assert val_start > train_end
+        assert test_start > val_end
+
+    def test_final_splits_are_chronological(self):
+        """Final 2026 experiment: train < val < test, no gaps or overlaps."""
+        assert FINAL_TRAIN_END < FINAL_VAL_START, (
+            f"Final val start {FINAL_VAL_START} must be after train end {FINAL_TRAIN_END}")
+        assert FINAL_VAL_END < P4_TEST_START, (
+            f"2026 test start {P4_TEST_START} must be after final val end {FINAL_VAL_END}")
+
+    def test_final_splits_do_not_overlap(self):
+        final_train_end = pd.Timestamp(FINAL_TRAIN_END)
+        final_val_start = pd.Timestamp(FINAL_VAL_START)
+        final_val_end   = pd.Timestamp(FINAL_VAL_END)
+        test_start      = pd.Timestamp(P4_TEST_START)
+        assert final_val_start > final_train_end
+        assert test_start > final_val_end
+
+    def test_historical_train_end_strictly_before_final_train_end(self):
+        """Historical model trains on less data than the final model."""
+        assert ML_TRAIN_END < FINAL_TRAIN_END

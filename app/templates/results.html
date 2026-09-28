@@ -43,7 +43,7 @@
   </p>
 
   {% if result.is_cointegrated and not result.is_borderline %}
-    <span class="badge badge-yes">Cointegrated (EG or trace ≥ 5%)</span>
+    <span class="badge badge-yes">Cointegrated (EG or Johansen trace at 5%)</span>
   {% elif result.is_borderline %}
     <span class="badge badge-warn">Borderline (trace 10% only)</span>
   {% else %}
@@ -95,7 +95,7 @@
         </td>
       </tr>
       <tr>
-        <td>Johansen max-eigenvalue (r=0)</td>
+        <td>Johansen max-eigenvalue (r=0) <em style="color:#888;">(display only — not used for decision)</em></td>
         <td class="num">{{ "%.4f" | format(result.johansen.maxeig_stat_r0) }}</td>
         <td class="num">CV: {{ "%.4f" | format(result.johansen.maxeig_crit_r0_5pct) }}</td>
         <td class="{{ 'pass' if result.johansen.maxeig_pass_5pct else 'fail' }}">

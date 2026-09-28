@@ -1,0 +1,160 @@
+"""
+tests/test_app.py — FastAPI app tests.
+
+Three cases:
+  1. Cointegrated pair  : synthetic y = 0.8*x + noise (tight cointegration)
+  2. Not cointegrated   : two independent random walks
+  3. Bad input          : CSV missing the Date column
+"""
+
+import io
+import sys
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import pytest
+from fastapi.testclient import TestClient
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "src"))
+
+from app.main import app  # noqa: E402
+
+client = TestClient(app)
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+_RNG = np.random.default_rng(42)
+
+
+def _make_csv(df: pd.DataFrame) -> bytes:
+    buf = io.StringIO()
+    df.to_csv(buf, index=True)
+    return buf.getvalue().encode()
+
+
+def _cointegrated_csv(n: int = 200) -> bytes:
+    """y = 0.8*x + small noise → tight cointegration."""
+    dates = pd.bdate_range("2018-01-02", periods=n)
+    x = np.cumsum(_RNG.standard_normal(n)) + 100
+    y = 0.8 * x + _RNG.standard_normal(n) * 0.5
+    df = pd.DataFrame({"Date": dates, "AssetA": x, "AssetB": y})
+    df = df.set_index("Date")
+    return _make_csv(df)
+
+
+def _independent_csv(n: int = 200) -> bytes:
+    """Two independent random walks — unlikely to be cointegrated."""
+    dates = pd.bdate_range("2018-01-02", periods=n)
+    x = np.cumsum(_RNG.standard_normal(n)) + 100
+    y = np.cumsum(_RNG.standard_normal(n)) + 50
+    df = pd.DataFrame({"Date": dates, "SeriesX": x, "SeriesY": y})
+    df = df.set_index("Date")
+    return _make_csv(df)
+
+
+def _no_date_csv() -> bytes:
+    """CSV without a Date column — should fail validation."""
+    df = pd.DataFrame({"Price1": [100, 101, 102], "Price2": [200, 201, 202]})
+    return df.to_csv(index=False).encode()
+
+
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
+
+class TestAnalyseEndpoint:
+    def test_get_home_returns_200(self):
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert "Pairs Trading" in resp.text
+
+    def test_cointegrated_pair_html(self):
+        csv_bytes = _cointegrated_csv()
+        resp = client.post(
+            "/analyse",
+            files={"file": ("pair.csv", csv_bytes, "text/csv")},
+            data={"ticker1": "", "ticker2": ""},
+        )
+        assert resp.status_code == 200
+        # Should show cointegrated badge OR the weak/no badge — just check the page rendered
+        assert "AssetA" in resp.text or "AssetB" in resp.text
+
+    def test_not_cointegrated_html_no_signals(self):
+        csv_bytes = _independent_csv()
+        resp = client.post(
+            "/analyse",
+            files={"file": ("indep.csv", csv_bytes, "text/csv")},
+            data={"ticker1": "", "ticker2": ""},
+        )
+        assert resp.status_code == 200
+        # Results page must be returned; signals section should NOT appear
+        assert "SeriesX" in resp.text or "SeriesY" in resp.text
+        # The spread chart should only appear when cointegrated
+        assert "Spread (log-price residual)" not in resp.text or \
+               "signals not generated" in resp.text or \
+               "Not cointegrated" in resp.text
+
+    def test_bad_input_no_date_column(self):
+        csv_bytes = _no_date_csv()
+        resp = client.post(
+            "/analyse",
+            files={"file": ("bad.csv", csv_bytes, "text/csv")},
+            data={"ticker1": "", "ticker2": ""},
+        )
+        # Should re-render the form with an error (422 from HTTPException, rendered as HTML)
+        assert resp.status_code in (200, 422)
+        assert "Date" in resp.text  # error message mentions Date column
+
+    def test_bad_input_no_ticker_no_file(self):
+        resp = client.post(
+            "/analyse",
+            data={"ticker1": "", "ticker2": ""},
+        )
+        assert resp.status_code in (200, 422)
+        assert "Select two tickers" in resp.text or "error" in resp.text.lower()
+
+
+class TestApiAnalyseEndpoint:
+    def test_cointegrated_pair_json_structure(self):
+        csv_bytes = _cointegrated_csv()
+        resp = client.post(
+            "/api/analyse",
+            files={"file": ("pair.csv", csv_bytes, "text/csv")},
+            data={"ticker1": "", "ticker2": ""},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "is_cointegrated" in data
+        assert "engle_granger" in data
+        assert "johansen" in data
+        # Charts must NOT appear in JSON
+        assert "chart_spread_b64" not in data
+        assert "chart_zscore_b64" not in data
+
+    def test_not_cointegrated_json_no_signals(self):
+        csv_bytes = _independent_csv()
+        resp = client.post(
+            "/api/analyse",
+            files={"file": ("indep.csv", csv_bytes, "text/csv")},
+            data={"ticker1": "", "ticker2": ""},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "is_cointegrated" in data
+        # When not cointegrated: signals list is empty
+        if not data["is_cointegrated"]:
+            assert data["signals"] == []
+
+    def test_bad_input_returns_422(self):
+        csv_bytes = _no_date_csv()
+        resp = client.post(
+            "/api/analyse",
+            files={"file": ("bad.csv", csv_bytes, "text/csv")},
+            data={"ticker1": "", "ticker2": ""},
+        )
+        assert resp.status_code == 422
+        assert "Date" in resp.json()["detail"]

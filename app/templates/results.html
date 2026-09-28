@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Analysis: {{ result.dep }} / {{ result.indep }}</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body  { font-family: system-ui, sans-serif; max-width: 960px; margin: 40px auto;
+            padding: 0 20px; color: #222; background: #fafafa; }
+    h1    { font-size: 1.5rem; margin-bottom: 2px; }
+    .meta { color: #666; font-size: 0.88rem; margin-bottom: 24px; }
+    h2    { font-size: 1.1rem; border-bottom: 1px solid #dde; padding-bottom: 6px;
+            margin: 28px 0 12px; }
+    .badge { display: inline-block; padding: 4px 12px; border-radius: 20px;
+             font-weight: 700; font-size: 0.9rem; }
+    .badge-yes { background: #d1fae5; color: #065f46; }
+    .badge-no  { background: #fee2e2; color: #991b1b; }
+    .badge-warn{ background: #fef3c7; color: #92400e; }
+    .summary-box { background: #f0f9ff; border-left: 4px solid #2563eb;
+                   padding: 10px 16px; border-radius: 4px; margin-bottom: 20px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    th    { background: #f1f5f9; text-align: left; padding: 7px 10px;
+            border-bottom: 2px solid #cbd5e1; }
+    td    { padding: 6px 10px; border-bottom: 1px solid #e2e8f0; }
+    tr:last-child td { border-bottom: none; }
+    .pass  { color: #065f46; font-weight: 600; }
+    .fail  { color: #991b1b; }
+    .num   { text-align: right; font-variant-numeric: tabular-nums; }
+    img    { max-width: 100%; border: 1px solid #dde; border-radius: 4px;
+             margin: 8px 0; display: block; }
+    .back  { display: inline-block; margin-top: 28px; color: #2563eb;
+             text-decoration: none; font-size: 0.9rem; }
+    .back:hover { text-decoration: underline; }
+    .signals-count { color: #555; font-size: 0.88rem; margin-top: -8px; margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+  <h1>{{ result.dep }} / {{ result.indep }}</h1>
+  <p class="meta">
+    {{ result.n_obs }} observations &nbsp;·&nbsp;
+    {{ result.date_range.start }} to {{ result.date_range.end }}
+  </p>
+
+  {% if result.is_cointegrated %}
+    <span class="badge badge-yes">Cointegrated (≥ 5%)</span>
+  {% elif result.cointegration_summary.startswith("Tests pass at 10%") %}
+    <span class="badge badge-warn">Weak (10% only)</span>
+  {% else %}
+    <span class="badge badge-no">Not cointegrated</span>
+  {% endif %}
+
+  <div class="summary-box" style="margin-top:12px;">{{ result.cointegration_summary }}</div>
+
+  {# ---- Cointegration results table ---------------------------------------- #}
+  <h2>Cointegration test results</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Test</th>
+        <th>Statistic</th>
+        <th>p-value / CV</th>
+        <th>Pass 5%?</th>
+        <th>Pass 10%?</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Engle-Granger ADF ({{ result.engle_granger.direction }})</td>
+        <td class="num">{{ "%.4f" | format(result.engle_granger.adf_stat) }}</td>
+        <td class="num">{{ "%.4f" | format(result.engle_granger.adf_pval) }}</td>
+        <td class="{{ 'pass' if result.engle_granger.pass_5pct else 'fail' }}">
+          {{ "Yes" if result.engle_granger.pass_5pct else "No" }}
+        </td>
+        <td class="{{ 'pass' if result.engle_granger.pass_10pct else 'fail' }}">
+          {{ "Yes" if result.engle_granger.pass_10pct else "No" }}
+        </td>
+      </tr>
+      <tr>
+        <td>Johansen trace (r=0)</td>
+        <td class="num">{{ "%.4f" | format(result.johansen.trace_stat_r0) }}</td>
+        <td class="num">CV: {{ "%.4f" | format(result.johansen.trace_crit_r0_5pct) }}</td>
+        <td class="{{ 'pass' if result.johansen.trace_pass_5pct else 'fail' }}">
+          {{ "Yes" if result.johansen.trace_pass_5pct else "No" }}
+        </td>
+        <td class="{{ 'pass' if result.johansen.trace_pass_10pct else 'fail' }}">
+          {{ "Yes" if result.johansen.trace_pass_10pct else "No" }}
+        </td>
+      </tr>
+      <tr>
+        <td>Johansen max-eigenvalue (r=0)</td>
+        <td class="num">{{ "%.4f" | format(result.johansen.maxeig_stat_r0) }}</td>
+        <td class="num">CV: {{ "%.4f" | format(result.johansen.maxeig_crit_r0_5pct) }}</td>
+        <td class="{{ 'pass' if result.johansen.maxeig_pass_5pct else 'fail' }}">
+          {{ "Yes" if result.johansen.maxeig_pass_5pct else "No" }}
+        </td>
+        <td class="{{ 'pass' if result.johansen.maxeig_pass_10pct else 'fail' }}">
+          {{ "Yes" if result.johansen.maxeig_pass_10pct else "No" }}
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  {% if result.is_cointegrated %}
+
+    {# ---- Spread chart ------------------------------------------------------- #}
+    <h2>Spread (log-price residual)</h2>
+    <p style="color:#555;font-size:0.88rem;margin-top:-8px;">
+      Hedge ratio: {{ "%.4f" | format(result.engle_granger.hedge_ratio) }} &nbsp;·&nbsp;
+      Intercept: {{ "%.4f" | format(result.engle_granger.intercept) }}
+    </p>
+    <img src="data:image/png;base64,{{ result.chart_spread_b64 }}" alt="Spread chart">
+
+    {# ---- Z-score chart ------------------------------------------------------ #}
+    <h2>Z-score with entry / exit thresholds</h2>
+    <img src="data:image/png;base64,{{ result.chart_zscore_b64 }}" alt="Z-score chart">
+
+    {# ---- Strategy metrics --------------------------------------------------- #}
+    <h2>Strategy metrics</h2>
+    <table>
+      <thead>
+        <tr><th>Metric</th><th class="num">Value</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Total P&amp;L (log-price)</td>
+            <td class="num">{{ "%.6f" | format(result.metrics.Total_PnL) }}</td></tr>
+        <tr><td>Annualised P&amp;L</td>
+            <td class="num">{{ "%.6f" | format(result.metrics.Ann_PnL) }}</td></tr>
+        <tr><td>Sharpe ratio</td>
+            <td class="num">{{ "%.4f" | format(result.metrics.Sharpe_ratio) }}</td></tr>
+        <tr><td>Max drawdown</td>
+            <td class="num">{{ "%.6f" | format(result.metrics.Max_drawdown) }}</td></tr>
+        <tr><td>Number of entries</td>
+            <td class="num">{{ result.metrics.Num_trades }}</td></tr>
+        <tr><td>% time in market</td>
+            <td class="num">{{ "%.1f" | format(result.metrics.Pct_in_market) }}%</td></tr>
+      </tbody>
+    </table>
+
+    {# ---- Signals table ------------------------------------------------------ #}
+    <h2>Signals</h2>
+    {% if result.signals %}
+    <p class="signals-count">{{ result.n_signals }} trade(s) found</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Signal date</th>
+          <th>Execution date</th>
+          <th>Exit date</th>
+          <th>Position</th>
+          <th class="num">Entry Z</th>
+          <th class="num">Exit Z</th>
+          <th class="num">Days</th>
+          <th class="num">Net P&amp;L</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for trade in result.signals %}
+        <tr>
+          <td>{{ trade.Signal_Date }}</td>
+          <td>{{ trade.Execution_Date }}</td>
+          <td>{{ trade.Exit_Date }}</td>
+          <td>{{ trade.Position }}</td>
+          <td class="num">{{ "%.4f" | format(trade.Signal_Z_score) }}</td>
+          <td class="num">{{ "%.4f" | format(trade.Exit_Z_score) }}</td>
+          <td class="num">{{ trade.Holding_Days }}</td>
+          <td class="num">{{ "%.6f" | format(trade.Net_PnL) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p style="color:#555;">No completed or open trades in this window.</p>
+    {% endif %}
+
+  {% endif %}
+
+  <a href="/" class="back">&larr; Analyse another pair</a>
+</body>
+</html>

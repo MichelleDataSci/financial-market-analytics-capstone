@@ -174,7 +174,7 @@ Both pairs show weak mean reversion in 2026; the spread has drifted materially f
 | AMZN/META | 1.82 | 0.36 | Yes (5× worse) | 0.27 |
 | MSFT/AAPL | 0.39 | 0.25 | Yes (1.6× worse) | 0.22 |
 
-The LSTM generalises poorly from 2018–2020 training to the 2022–2025 test regime; persistence (naive carry-forward) outperforms it on both pairs.
+The LSTM generalises poorly from 2018–2020 training to the 2022–2025 test regime; persistence (naive carry-forward) outperforms it on both pairs. In the 2022–2025 holdout the convergence gate did not change any trades for either pair (baseline and LSTM P&L identical), so the LSTM added no value to the strategy.
 
 **Final 2026 comparison** (LSTM trained 2018–2024, tested 2026):
 
@@ -197,11 +197,11 @@ For AMZN/META, only 21.4% of 2026 bars were classified as converging, so the gat
 
 5. **LSTM loses to naive persistence.** On both pairs, the persistence baseline (carry-forward z-score) achieves lower RMSE than the stacked LSTM on the 2022–2025 test set. AMZN/META LSTM is 5× worse (RMSE 1.82 vs 0.36). This is consistent with a non-stationary spread that invalidates the historical training distribution.
 
-6. **AMZN/META LSTM took no trades in 2026.** The convergence gate rejected both Phase 4 signals (only 21.4% of bars classified as converging). This is not evidence that the LSTM correctly avoided losses — it reflects low predicted convergence probability in a small sample and does not demonstrate forecasting skill.
+6. **AMZN/META LSTM took no trades in 2026.** The convergence gate rejected both Phase 4 signals (only 21.4% of bars classified as converging). This is not evidence that the LSTM correctly avoided losses — it reflects a low convergence rate in a small sample and does not demonstrate forecasting skill.
 
 7. **Sensitivity grid is diagnostic, not tuning.** Phase 3b sensitivity analysis over z-score thresholds and cost levels is reported for transparency; it was not used to select strategy parameters. Parameters (Z_entry = 2.0, Z_exit = 0.0, Z_stop = 3.0) were fixed before testing.
 
-8. **LSTM seed sensitivity.** The LSTM uses a fixed global seed (`tf.keras.utils.set_random_seed` + op determinism) to ensure reproducibility. Across different seeds, MSFT/AAPL holdout RMSE ranges from 0.39 to 0.60, AMZN/META 2026 convergence probability ranges from 35% to 75%, and the LSTM loses to naive persistence in every run. The fixed-seed values reported here are representative but not uniquely determined.
+8. **LSTM seed sensitivity.** The LSTM uses a fixed global seed (`tf.keras.utils.set_random_seed` + op determinism) to ensure reproducibility. Across reruns made before determinism was enforced, MSFT/AAPL holdout RMSE ranges from 0.39 to 0.60, AMZN/META 2026 convergence rate ranges from 21% to 75%, and the LSTM loses to naive persistence in every run. The fixed-seed values reported here are representative but not uniquely determined.
 
 9. **Cached 2026 data.** 2026 prices are cached to `data/raw/{ticker}_2026.csv` on first run (via `load_or_download_2026`). This prevents yfinance's retroactive price-adjustment mechanism from altering results across sessions. Use `--refresh` to re-download if needed.
 

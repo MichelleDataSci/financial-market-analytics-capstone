@@ -220,22 +220,25 @@ For AMZN/META, only 21.4% of 2026 bars were classified as converging, so the gat
 
 ### Convergence gate — binary classification evaluation (`evaluate_gate.py`)
 
-The convergence gate is evaluated as a binary classifier: predicted label = gate says converging; actual label = mean|z| over the next 5 days < |z| today. The final models (trained 2018–2024) are used for both periods; note that 2022–2024 is partially in-sample for those models.
+The LSTM gate is evaluated as a binary classifier: predicted label = gate says converging; actual label = mean|z| over the next 5 days < |z| today. Each period uses a genuinely unseen model — no leakage:
 
-**Classification metrics** (n = bars in period; convergence_rate = fraction of bars where spread actually converged):
+- **2022–2025 holdout** — historical model (`hist_v1`): OLS + scaler + LSTM all trained on 2018–2020.
+- **2026 test** — final model (`v1`): OLS + scaler + LSTM all trained on 2018–2024.
 
-| Pair | Period | n | Conv. rate | Model | Accuracy | Precision | Recall | F1 | ROC-AUC |
-|------|--------|---|------------|-------|----------|-----------|--------|----|---------|
-| AMZN/META | Holdout 2022–2025 | 1 003 | 0.52 | LSTM gate | 0.527 | 0.546 | 0.546 | 0.546 | 0.542 |
-| AMZN/META | Holdout 2022–2025 | 1 003 | 0.52 | Naive (always conv.) | 0.520 | 0.520 | 1.000 | 0.685 | 0.500 |
-| AMZN/META | Test 2026 | 139 | 0.56 | LSTM gate | 0.475 | 0.581 | 0.231 | 0.330 | 0.452 |
-| AMZN/META | Test 2026 | 139 | 0.56 | Naive (always conv.) | 0.561 | 0.561 | 1.000 | 0.719 | 0.500 |
-| MSFT/AAPL | Holdout 2022–2025 | 1 003 | 0.49 | LSTM gate | 0.556 | 0.549 | 0.579 | 0.563 | 0.582 |
-| MSFT/AAPL | Holdout 2022–2025 | 1 003 | 0.49 | Naive (always conv.) | 0.495 | 0.495 | 1.000 | 0.662 | 0.500 |
-| MSFT/AAPL | Test 2026 | 139 | 0.34 | LSTM gate | 0.381 | 0.321 | 0.745 | 0.449 | 0.537 |
-| MSFT/AAPL | Test 2026 | 139 | 0.34 | Naive (always conv.) | 0.338 | 0.338 | 1.000 | 0.505 | 0.500 |
+**Classification metrics** (n = bars in period; conv. rate = fraction of bars where spread actually converged):
 
-The LSTM gate achieves near-random discrimination (ROC-AUC 0.45–0.58). On the 2026 test, AMZN/META ROC-AUC falls below 0.5, meaning the gate's confidence score is negatively correlated with actual convergence. MSFT/AAPL shows a slight edge over naive on accuracy and ROC-AUC in both periods, but the margin is within noise given the sample sizes. Confusion matrices are saved to `outputs/charts/`.
+| Pair | Period | Model | n | Conv. rate | Accuracy | Precision | Recall | F1 | ROC-AUC |
+|------|--------|-------|---|------------|----------|-----------|--------|----|---------|
+| AMZN/META | Holdout 2022–2025 | hist\_v1 | 1 003 | 0.47 | 0.520 | 0.496 | 0.941 | 0.650 | 0.596 |
+| AMZN/META | Holdout 2022–2025 | Naive | 1 003 | 0.47 | 0.473 | 0.473 | 1.000 | 0.642 | 0.500 |
+| AMZN/META | Test 2026 | v1 | 139 | 0.56 | 0.475 | 0.581 | 0.231 | 0.330 | 0.452 |
+| AMZN/META | Test 2026 | Naive | 139 | 0.56 | 0.561 | 0.561 | 1.000 | 0.719 | 0.500 |
+| MSFT/AAPL | Holdout 2022–2025 | hist\_v1 | 1 003 | 0.49 | 0.508 | 0.499 | 0.697 | 0.581 | 0.532 |
+| MSFT/AAPL | Holdout 2022–2025 | Naive | 1 003 | 0.49 | 0.490 | 0.490 | 1.000 | 0.657 | 0.500 |
+| MSFT/AAPL | Test 2026 | v1 | 139 | 0.34 | 0.381 | 0.321 | 0.745 | 0.449 | 0.537 |
+| MSFT/AAPL | Test 2026 | Naive | 139 | 0.34 | 0.338 | 0.338 | 1.000 | 0.505 | 0.500 |
+
+The LSTM gate beats the naive baseline on ROC-AUC in three of four cases, but the margins are small (0.53–0.60) and the gate achieves this primarily through high recall (predicting convergence on most bars) rather than precision. On the 2026 AMZN/META test, ROC-AUC is 0.45 — below random — consistent with a regime shift the final model did not anticipate. Confusion matrices are saved to `outputs/charts/`.
 
 **Permutation feature importance** (mean ΔRMSE on 2026 test, 5 repeats):
 

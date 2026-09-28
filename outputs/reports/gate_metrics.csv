@@ -1,9 +1,9 @@
-pair,period,label,n,accuracy,precision,recall,f1,roc_auc
-AMZN_META,holdout_2022_2025,LSTM gate,1003,0.5274,0.546,0.546,0.546,0.5419
-AMZN_META,holdout_2022_2025,Naive (always conv.),1003,0.5204,0.5204,1.0,0.6846,0.5
-AMZN_META,test_2026,LSTM gate,139,0.4748,0.5806,0.2308,0.3303,0.4523
-AMZN_META,test_2026,Naive (always conv.),139,0.5612,0.5612,1.0,0.7189,0.5
-MSFT_AAPL,holdout_2022_2025,LSTM gate,1003,0.5563,0.5488,0.5786,0.5633,0.5817
-MSFT_AAPL,holdout_2022_2025,Naive (always conv.),1003,0.4945,0.4945,1.0,0.6618,0.5
-MSFT_AAPL,test_2026,LSTM gate,139,0.3813,0.3211,0.7447,0.4487,0.537
-MSFT_AAPL,test_2026,Naive (always conv.),139,0.3381,0.3381,1.0,0.5054,0.5
+pair,period,model_suffix,label,n,accuracy,precision,recall,f1,roc_auc
+AMZN_META,holdout_2022_2025,hist_v1,LSTM gate,1003,0.5204,0.4961,0.9409,0.6497,0.5959
+AMZN_META,holdout_2022_2025,hist_v1,Naive (always conv.),1003,0.4726,0.4726,1.0,0.6418,0.5
+AMZN_META,test_2026,v1,LSTM gate,139,0.4748,0.5806,0.2308,0.3303,0.4523
+AMZN_META,test_2026,v1,Naive (always conv.),139,0.5612,0.5612,1.0,0.7189,0.5
+MSFT_AAPL,holdout_2022_2025,hist_v1,LSTM gate,1003,0.5085,0.4985,0.6965,0.5811,0.5319
+MSFT_AAPL,holdout_2022_2025,hist_v1,Naive (always conv.),1003,0.4895,0.4895,1.0,0.6573,0.5
+MSFT_AAPL,test_2026,v1,LSTM gate,139,0.3813,0.3211,0.7447,0.4487,0.537
+MSFT_AAPL,test_2026,v1,Naive (always conv.),139,0.3381,0.3381,1.0,0.5054,0.5

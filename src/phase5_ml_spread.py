@@ -342,45 +342,45 @@ def persistence_baseline(X, y_true):
 # Model artefact persistence (Task 3)
 # ---------------------------------------------------------------------------
 
-def save_artifacts(tag, model, hr, ic, mu, sigma):
+def save_artifacts(tag, model, hr, ic, mu, sigma, suffix="v1"):
     """
-    Save final LSTM model and fitted OLS/scaler parameters to models/.
+    Save LSTM model and fitted OLS/scaler parameters to models/.
 
-    Files written:
-      models/{tag}_lstm_v1.keras
-      models/{tag}_ols_v1.joblib   — {"hedge_ratio": hr, "intercept": ic}
-      models/{tag}_scaler_v1.joblib — {"mu": mu, "sigma": sigma}
+    Files written (suffix defaults to "v1"; use "hist_v1" for historical model):
+      models/{tag}_lstm_{suffix}.keras
+      models/{tag}_ols_{suffix}.joblib   — {"hedge_ratio": hr, "intercept": ic}
+      models/{tag}_scaler_{suffix}.joblib — {"mu": mu, "sigma": sigma}
     """
-    model_path  = MODELS_DIR / f"{tag}_lstm_v1.keras"
-    ols_path    = MODELS_DIR / f"{tag}_ols_v1.joblib"
-    scaler_path = MODELS_DIR / f"{tag}_scaler_v1.joblib"
+    model_path  = MODELS_DIR / f"{tag}_lstm_{suffix}.keras"
+    ols_path    = MODELS_DIR / f"{tag}_ols_{suffix}.joblib"
+    scaler_path = MODELS_DIR / f"{tag}_scaler_{suffix}.joblib"
     model.save(model_path)
     joblib.dump({"hedge_ratio": hr, "intercept": ic}, ols_path)
     joblib.dump({"mu": mu, "sigma": sigma}, scaler_path)
-    print(f"  Artefacts saved:")
+    print(f"  Artefacts saved ({suffix}):")
     print(f"    {model_path}")
     print(f"    {ols_path}")
     print(f"    {scaler_path}")
     return model_path, ols_path, scaler_path
 
 
-def load_artifacts(tag):
+def load_artifacts(tag, suffix="v1"):
     """
     Load saved artefacts for a pair tag (e.g. 'AMZN_META').
-    Returns (model, ols_params, scaler_params) where:
-      ols_params    = {"hedge_ratio": float, "intercept": float}
-      scaler_params = {"mu": float, "sigma": float}
+
+    suffix: "v1" (final model, default) or "hist_v1" (historical model).
+    Returns (model, ols_params, scaler_params).
     Raises FileNotFoundError if any file is missing.
     """
-    model_path  = MODELS_DIR / f"{tag}_lstm_v1.keras"
-    ols_path    = MODELS_DIR / f"{tag}_ols_v1.joblib"
-    scaler_path = MODELS_DIR / f"{tag}_scaler_v1.joblib"
+    model_path  = MODELS_DIR / f"{tag}_lstm_{suffix}.keras"
+    ols_path    = MODELS_DIR / f"{tag}_ols_{suffix}.joblib"
+    scaler_path = MODELS_DIR / f"{tag}_scaler_{suffix}.joblib"
     for p in (model_path, ols_path, scaler_path):
         if not p.exists():
             raise FileNotFoundError(
                 f"Artefact not found: {p}\n"
                 "Run phase5_ml_spread.py first to generate saved models.")
-    model       = keras.models.load_model(model_path)
+    model         = keras.models.load_model(model_path)
     ols_params    = joblib.load(ols_path)
     scaler_params = joblib.load(scaler_path)
     return model, ols_params, scaler_params
@@ -722,6 +722,10 @@ def run_phase5_pair(dep, indep, tests_passed):
     pd.DataFrame(metrics_rows).to_csv(
         REPORTS_DIR / f"phase5_{tag}_lstm_metrics.csv", index=False)
     print(f"  Metrics CSV saved -> phase5_{tag}_lstm_metrics.csv")
+
+    # Save historical artefacts (OLS + scaler + LSTM all trained on 2018-2020)
+    # so evaluate_gate.py can use a clean holdout model for 2022-2025 evaluation.
+    save_artifacts(tag, model, hr5, ic5, mu5, sigma5, suffix="hist_v1")
 
     # Prediction chart (one subplot per horizon step)
     n_plot = min(252, len(y_te))

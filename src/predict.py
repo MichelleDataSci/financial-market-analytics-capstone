@@ -31,12 +31,15 @@ HORIZON         = 5
 ROLLING_STD_WIN = 20
 
 
-def load_artefacts(tag):
-    """Return (model, ols_params, scaler_params) for the given pair tag."""
+def load_artefacts(tag, suffix="v1"):
+    """Return (model, ols_params, scaler_params) for the given pair tag.
+
+    suffix: "v1" (final model, default) or "hist_v1" (historical 2018-2020 model).
+    """
     import tensorflow as tf  # deferred: avoid TF startup cost at import time
-    model  = tf.keras.models.load_model(MODELS_DIR / f"{tag}_lstm_v1.keras")
-    ols    = joblib.load(MODELS_DIR / f"{tag}_ols_v1.joblib")
-    scaler = joblib.load(MODELS_DIR / f"{tag}_scaler_v1.joblib")
+    model  = tf.keras.models.load_model(MODELS_DIR / f"{tag}_lstm_{suffix}.keras")
+    ols    = joblib.load(MODELS_DIR / f"{tag}_ols_{suffix}.joblib")
+    scaler = joblib.load(MODELS_DIR / f"{tag}_scaler_{suffix}.joblib")
     return model, ols, scaler
 
 
@@ -119,9 +122,9 @@ def forecast_with_artefacts(dep, indep, model, ols, scaler):
     }
 
 
-def forecast_pair(dep, indep):
+def forecast_pair(dep, indep, suffix="v1"):
     """Load artefacts then run inference. Convenience wrapper around forecast_with_artefacts."""
-    model, ols, scaler = load_artefacts(f"{dep}_{indep}")
+    model, ols, scaler = load_artefacts(f"{dep}_{indep}", suffix=suffix)
     return forecast_with_artefacts(dep, indep, model, ols, scaler)
 
 

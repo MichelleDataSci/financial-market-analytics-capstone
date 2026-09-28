@@ -12,9 +12,11 @@ Also reports permutation feature importance (mean increase in 5-step RMSE
 against ground-truth z-scores when each feature is shuffled across sequences)
 using the 2026 test data.
 
-Note: the saved artefacts are the final models trained on 2018-2024.
-The 2022-2025 period is therefore partially in-sample for these models;
-interpret those metrics accordingly.
+Model assignment:
+  2022-2025 holdout — historical model (hist_v1): OLS + scaler + LSTM all
+                       trained on 2018-2020; 2022-2025 is genuinely unseen.
+  2026 test         — final model (v1): OLS + scaler + LSTM all trained on
+                       2018-2024; 2026 is genuinely unseen.
 
 Saves:
   outputs/reports/gate_metrics.csv
@@ -52,9 +54,12 @@ HORIZON         = 5
 ROLLING_STD_WIN = 20
 FEATURE_NAMES   = ["z_std", "lag1", "lag2", "lag3", "roll_std"]
 
+# Each period maps to (date_start, date_end, artefact_suffix).
+# holdout uses the historical model (trained 2018-2020) to avoid leakage;
+# 2026 test uses the final model (trained 2018-2024).
 EVAL_PERIODS = {
-    "holdout_2022_2025": ("2022-01-01", "2025-12-31"),
-    "test_2026":         ("2026-01-01", "2026-12-31"),
+    "holdout_2022_2025": ("2022-01-01", "2025-12-31", "hist_v1"),
+    "test_2026":         ("2026-01-01", "2026-12-31", "v1"),
 }
 
 
@@ -284,18 +289,25 @@ def main():
         print(f"Pair: {dep}/{indep}  [{sel_row['Tests_passed']}]")
         print("="*60)
 
-        print("  Loading artefacts ...")
-        model, ols, scaler = load_artefacts(tag)
-
-        print("  Building evaluation arrays (batch inference) ...")
-        eval_df, X_all, y_actual_all = build_eval_arrays(dep, indep, model, ols, scaler)
-        print(f"  Total evaluation bars: {len(eval_df)}")
+        # Load both models upfront; cache by suffix to avoid reloading per period
+        loaded_artefacts: dict[str, tuple] = {}
 
         # Per-period classification evaluation
-        for period_name, (start, end) in EVAL_PERIODS.items():
+        for period_name, (start, end, suffix) in EVAL_PERIODS.items():
+            if suffix not in loaded_artefacts:
+                print(f"  Loading {suffix} artefacts ...")
+                loaded_artefacts[suffix] = load_artefacts(tag, suffix=suffix)
+
+            model, ols, scaler = loaded_artefacts[suffix]
+            print(f"  Building eval arrays for {period_name} "
+                  f"(model={suffix}) ...")
+            eval_df, X_all, y_actual_all = build_eval_arrays(
+                dep, indep, model, ols, scaler
+            )
+
             prd = eval_df.loc[start:end].copy()
             if len(prd) < 5:
-                print(f"\n  [{period_name}] Too few bars ({len(prd)}), skipping.")
+                print(f"  [{period_name}] Too few bars ({len(prd)}), skipping.")
                 continue
 
             y_true = prd["actual_label"].values
@@ -306,7 +318,7 @@ def main():
             lstm_m  = compute_clf_metrics(y_true, y_pred, scores, label="LSTM gate")
             naive_m = naive_metrics(y_true)
 
-            print(f"\n  [{period_name}]  n={n}  "
+            print(f"\n  [{period_name}]  model={suffix}  n={n}  "
                   f"convergence_rate={y_true.mean():.2f}")
             hdr = f"  {'Model':<30}  {'acc':>5}  {'prec':>5}  {'rec':>5}  {'f1':>5}  {'roc_auc':>7}"
             print(hdr)
@@ -319,21 +331,28 @@ def main():
                     f"{m['f1']:5.3f}  "
                     f"{m['roc_auc']:7.3f}"
                 )
-                all_metrics.append({"pair": tag, "period": period_name, **m})
+                all_metrics.append({
+                    "pair": tag, "period": period_name,
+                    "model_suffix": suffix, **m,
+                })
 
-            row_idx = prd["_row_idx"].values.astype(int)
             save_confusion_matrix_chart(y_true, y_pred, tag, period_name, n)
 
-        # Permutation feature importance on 2026 test (genuinely unseen)
-        print(f"\n  Permutation feature importance (2026 test, {5} repeats × {len(FEATURE_NAMES)} features) ...")
-        test_prd = eval_df.loc["2026-01-01":"2026-12-31"]
+        # Permutation feature importance on 2026 test using the final v1 model
+        print(f"\n  Permutation feature importance "
+              f"(2026 test · v1 model · {5} repeats × {len(FEATURE_NAMES)} features) ...")
+        v1_model, v1_ols, v1_scaler = loaded_artefacts.get("v1") or load_artefacts(tag, suffix="v1")
+        eval_df_v1, X_all_v1, y_actual_v1 = build_eval_arrays(
+            dep, indep, v1_model, v1_ols, v1_scaler
+        )
+        test_prd = eval_df_v1.loc["2026-01-01":"2026-12-31"]
         if len(test_prd) < 20:
             print(f"  Too few 2026 bars ({len(test_prd)}), skipping importance.")
         else:
-            t_idx    = test_prd["_row_idx"].values.astype(int)
-            X_t      = X_all[t_idx]
-            y_t      = y_actual_all[t_idx]
-            imp, bl  = compute_permutation_importance(model, X_t, y_t)
+            t_idx   = test_prd["_row_idx"].values.astype(int)
+            X_t     = X_all_v1[t_idx]
+            y_t     = y_actual_v1[t_idx]
+            imp, bl = compute_permutation_importance(v1_model, X_t, y_t)
             save_importance_chart(imp, tag, bl)
 
             imp_csv = REPORTS_DIR / f"feature_importance_{tag}.csv"
@@ -347,8 +366,10 @@ def main():
 
     # Save consolidated gate metrics CSV
     metrics_csv = REPORTS_DIR / "gate_metrics.csv"
+    cols = ["pair", "period", "model_suffix", "label", "n",
+            "accuracy", "precision", "recall", "f1", "roc_auc"]
     (
-        pd.DataFrame(all_metrics)
+        pd.DataFrame(all_metrics)[cols]
         .round(4)
         .to_csv(metrics_csv, index=False)
     )

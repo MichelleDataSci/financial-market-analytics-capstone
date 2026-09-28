@@ -120,11 +120,11 @@ def _fig_to_b64(fig) -> str:
     return base64.b64encode(buf.getvalue()).decode()
 
 
-def _chart_spread(spread: pd.Series, dep: str, indep: str) -> str:
+def _chart_spread(spread: pd.Series, dep: str, indep: str, hr: float) -> str:
     fig, ax = plt.subplots(figsize=(11, 3))
     ax.plot(spread.index, spread.values, lw=0.9, color="steelblue")
     ax.axhline(0, color="grey", lw=0.5, ls="--")
-    ax.set_title(f"Spread  (log {dep}  −  {'{:.3f}'.format(0)} · log {indep})")
+    ax.set_title(f"Spread  (log {dep}  −  {hr:.3f} · log {indep})")
     ax.set_ylabel("Log-price residual")
     return _fig_to_b64(fig)
 
@@ -253,7 +253,7 @@ def run_analysis(
             },
             "signals":   trade_df.to_dict("records") if not trade_df.empty else [],
             "n_signals": len(trade_df),
-            "chart_spread_b64":  _chart_spread(spread.dropna(), dep, indep),
+            "chart_spread_b64":  _chart_spread(spread.dropna(), dep, indep, hr),
             "chart_zscore_b64":  _chart_zscore(
                 zscore.dropna(),
                 trade_df if not trade_df.empty else None,

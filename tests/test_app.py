@@ -10,7 +10,9 @@ Three cases:
 import io
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
+import matplotlib.axes
 import numpy as np
 import pandas as pd
 import pytest
@@ -183,6 +185,26 @@ class TestCachedTickerPairs:
         data = resp.json()
         assert data["is_cointegrated"] is True
         assert data["is_borderline"] is True
+
+    def test_amzn_meta_spread_chart_title_contains_hedge_ratio(self):
+        """Spread chart title must show the actual hedge ratio at 3 d.p., not 0.000."""
+        from app.main import _chart_spread
+
+        dates = pd.bdate_range("2020-01-02", periods=50)
+        spread = pd.Series(np.zeros(50), index=dates)
+
+        titles: list[str] = []
+        real_set_title = matplotlib.axes.Axes.set_title
+
+        def _capture(self, label, *args, **kwargs):
+            titles.append(label)
+            return real_set_title(self, label, *args, **kwargs)
+
+        with patch.object(matplotlib.axes.Axes, "set_title", _capture):
+            _chart_spread(spread, "AMZN", "META", hr=0.5977)
+
+        assert len(titles) == 1
+        assert "0.598" in titles[0], f"Expected '0.598' in chart title, got: {titles[0]!r}"
 
     def test_amzn_meta_html_shows_eg_pval(self):
         """Results page EG row must show the engle_granger p-value (0.0143), not the ADF residual p-value."""

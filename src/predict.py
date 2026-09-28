@@ -23,7 +23,7 @@ import pandas as pd
 import joblib
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from utils import DATA_RAW, REPORTS_DIR, MODELS_DIR
+from utils import DATA_RAW, REPORTS_DIR, MODELS_DIR, load_or_download_2026
 
 # Must match phase5_ml_spread.py
 SEQ_LEN         = 20
@@ -41,14 +41,34 @@ def load_artefacts(tag):
 
 
 def load_log_close(dep, indep):
-    """Load log close prices for dep and indep from cached raw CSVs."""
+    """
+    Load log close prices for dep and indep.
+
+    Concatenates the main raw CSV (2018-2025) with the cached 2026 CSV so the
+    forecast uses the latest available date (July 2026).  The 2026 file is read
+    from cache only (no network call); if it is absent the function falls back
+    to 2025-end data and prints a warning.
+    """
     frames = {}
     for ticker in [dep, indep]:
         path = DATA_RAW / f"{ticker}_raw.csv"
         df = pd.read_csv(path, index_col="Date", parse_dates=True)
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
-        frames[ticker] = df["Close"]
+        series = df["Close"]
+
+        # Append cached 2026 data if available
+        path_2026 = DATA_RAW / f"{ticker}_2026.csv"
+        if path_2026.exists():
+            df26 = pd.read_csv(path_2026, index_col="Date", parse_dates=True)
+            new_rows = df26["Close"].loc[df26.index > series.index[-1]]
+            if len(new_rows) > 0:
+                series = pd.concat([series, new_rows])
+        else:
+            print(f"  Warning: {path_2026.name} not found — using data up to {series.index[-1].date()}")
+
+        frames[ticker] = series
+
     close_df = pd.DataFrame(frames).dropna()
     return np.log(close_df)
 

@@ -322,10 +322,29 @@ def main():
               f"{joh['trace_crit_r0_10pct']:.2f} (10%) [{joh_flag}]")
 
     # -------------------------------------------------------------------------
-    # 4b. Rank by EG p-value (ascending = stronger evidence of cointegration)
+    # 4b. Rank by EG p-value and Johansen ratio; compute combined rank
     # -------------------------------------------------------------------------
     results_df = pd.DataFrame(records)
-    results_df["Rank"] = results_df["EG_pval"].rank(method="min").astype(int)
+
+    # EG rank: ascending p-value (rank 1 = strongest cointegration evidence)
+    results_df["EG_rank"] = results_df["EG_pval"].rank(method="min").astype(int)
+
+    # Johansen rank: trace_stat / 5% CV; descending (rank 1 = highest ratio)
+    results_df["Johansen_ratio"] = (
+        results_df["Johansen_trace_stat_r0"] / results_df["Johansen_trace_crit_r0"]
+    ).round(4)
+    results_df["Johansen_rank"] = (
+        results_df["Johansen_ratio"].rank(method="min", ascending=False).astype(int)
+    )
+
+    # Combined rank: average of EG_rank and Johansen_rank, then re-ranked
+    results_df["Combined_rank_score"] = (
+        (results_df["EG_rank"] + results_df["Johansen_rank"]) / 2
+    )
+    results_df["Combined_rank"] = (
+        results_df["Combined_rank_score"].rank(method="min").astype(int)
+    )
+
     results_df = results_df.sort_values("EG_pval").reset_index(drop=True)
 
     # Bonferroni-corrected flag stored alongside the nominal 5% flag so it
@@ -343,26 +362,28 @@ def main():
     # -------------------------------------------------------------------------
     # 6. Print ranking summary to console
     # -------------------------------------------------------------------------
-    print("\n" + "=" * 65)
-    print("RANKING TABLE -- BY ENGLE-GRANGER P-VALUE (ASCENDING)")
-    print("=" * 65)
-    hdr = (f"{'Rank':<5} {'Pair':<12} {'OLS Direction':<14} {'HR':>7}  "
-           f"{'ADF p':>7}  {'EG p':>7}  {'EG':>6}  {'Johansen':>10}")
+    print("\n" + "=" * 80)
+    print("RANKING TABLE -- EG P-VALUE | JOHANSEN RATIO | COMBINED")
+    print("=" * 80)
+    hdr = (f"{'EGr':>4} {'JOr':>4} {'Cr':>4}  {'Pair':<12}  "
+           f"{'EG p':>7}  {'EG':>6}  {'JO ratio':>9}  {'JO':>6}  {'Comb':>5}")
     print(hdr)
     print("-" * len(hdr))
     for _, row in results_df.iterrows():
-        eg_tag  = "PASS" if row["EG_cointegrated_5pct"]    else "FAIL"
+        eg_tag  = "PASS" if row["EG_cointegrated_5pct"] else "FAIL"
         if row["Johansen_trace_pass_5pct"]:
             joh_tag = "PASS"
         elif row["Johansen_trace_pass_10pct"]:
             joh_tag = "10%"
         else:
             joh_tag = "FAIL"
-        print(f"  {row['Rank']:<4} {row['Pair']:<12} {row['OLS_direction']:<14} "
-              f"{row['Hedge_ratio']:>7.4f}  "
-              f"{row['ADF_pval_on_residuals']:>7.4f}  "
+        print(f"  {row['EG_rank']:>3} {row['Johansen_rank']:>4} {row['Combined_rank']:>4}  "
+              f"{row['Pair']:<12}  "
               f"{row['EG_pval']:>7.4f}  "
-              f"{eg_tag:>6}  {joh_tag:>10}")
+              f"{eg_tag:>6}  "
+              f"{row['Johansen_ratio']:>9.3f}  "
+              f"{joh_tag:>6}  "
+              f"{row['Combined_rank_score']:>5.1f}")
 
     # -------------------------------------------------------------------------
     # 7. Shortlist -- selected pairs
@@ -381,7 +402,8 @@ def main():
             basis = ("(secondary -- Johansen 10%, supervisor-approved)"
                      if row["Tests_passed"] == "Johansen 10%"
                      else "(primary)")
-            print(f"  Rank {row['Rank']}: {row['Pair']}  [{row['Tests_passed']}]  {basis}")
+            print(f"  EG rank {row['EG_rank']} / JO rank {row['Johansen_rank']} / Combined {row['Combined_rank']}: "
+              f"{row['Pair']}  [{row['Tests_passed']}]  {basis}")
             print(f"    OLS dir={row['OLS_direction']}  HR={row['Hedge_ratio']}  "
                   f"EG p={row['EG_pval']:.4f}  "
                   f"Johansen trace={row['Johansen_trace_stat_r0']} "
@@ -468,39 +490,58 @@ def main():
     print(f"\nSpread chart saved -> {chart1}")
 
     # -------------------------------------------------------------------------
-    # 9. Ranking bar chart -- EG p-values, all 15 pairs
+    # 9. Ranking chart -- EG p-value (top) and Johansen ratio (bottom)
     # -------------------------------------------------------------------------
-    fig2, ax2 = plt.subplots(figsize=(10, 6))
-    bar_colors = [
+    from matplotlib.patches import Patch
+
+    # Sort by combined rank for a consistent y-axis order on both panels
+    _rank_df = results_df.sort_values("Combined_rank", ascending=False).reset_index(drop=True)
+
+    _bar_colors = [
         "steelblue"   if (eg and joh5) else
         "darkorange"  if (eg or joh5)  else
         "goldenrod"   if joh10         else
         "lightcoral"
         for eg, joh5, joh10 in zip(
-            results_df["EG_cointegrated_5pct"],
-            results_df["Johansen_trace_pass_5pct"],
-            results_df["Johansen_trace_pass_10pct"],
+            _rank_df["EG_cointegrated_5pct"],
+            _rank_df["Johansen_trace_pass_5pct"],
+            _rank_df["Johansen_trace_pass_10pct"],
         )
     ]
-    ax2.barh(
-        results_df["Pair"][::-1],
-        results_df["EG_pval"][::-1],
-        color=bar_colors[::-1],
-        edgecolor="white", linewidth=0.5
-    )
-    ax2.axvline(0.05, color="red", linestyle="--", linewidth=1.3, label="5% significance threshold")
-    ax2.set_xlabel("Engle-Granger p-value (lower = stronger cointegration evidence)", fontsize=10)
-    ax2.set_title("Cointegration Ranking -- All 15 Pairs (EG p-value)", fontsize=12)
 
-    from matplotlib.patches import Patch
+    fig2, (ax2a, ax2b) = plt.subplots(1, 2, figsize=(16, 7))
+    fig2.suptitle(
+        "Cointegration Ranking — All 15 Pairs\n"
+        "Blue = Both 5% | Orange = One 5% | Gold = Johansen 10% | Red = Neither",
+        fontsize=11
+    )
+
+    # Top panel: EG p-value
+    ax2a.barh(_rank_df["Pair"], _rank_df["EG_pval"], color=_bar_colors,
+              edgecolor="white", linewidth=0.5)
+    ax2a.axvline(0.05, color="red", linestyle="--", linewidth=1.3)
+    ax2a.set_xlabel("EG p-value  (lower → stronger)", fontsize=10)
+    ax2a.set_title("EG rank  (ascending p-value)", fontsize=10)
+    ax2a.invert_yaxis()
+
+    # Bottom panel: Johansen ratio (trace stat / 5% CV)
+    ax2b.barh(_rank_df["Pair"], _rank_df["Johansen_ratio"], color=_bar_colors,
+              edgecolor="white", linewidth=0.5)
+    ax2b.axvline(1.0, color="red", linestyle="--", linewidth=1.3,
+                 label="Ratio = 1.0  (5% CV)")
+    ax2b.set_xlabel("Johansen ratio  (trace stat / 5% CV,  higher → stronger)", fontsize=10)
+    ax2b.set_title("Johansen rank  (descending ratio)", fontsize=10)
+    ax2b.invert_yaxis()
+
     legend_items = [
-        Patch(facecolor="steelblue",  label="Both EG + Johansen 5% pass"),
-        Patch(facecolor="darkorange", label="One of EG / Johansen 5% passes"),
-        Patch(facecolor="goldenrod",  label="Johansen trace 10% only (supervisor-approved)"),
-        Patch(facecolor="lightcoral", label="Neither passes"),
+        Patch(facecolor="steelblue",  label="Both EG + Johansen 5%"),
+        Patch(facecolor="darkorange", label="One method at 5%"),
+        Patch(facecolor="goldenrod",  label="Johansen 10% only"),
+        Patch(facecolor="lightcoral", label="Neither"),
         plt.Line2D([0], [0], color="red", linestyle="--", label="5% threshold"),
     ]
-    ax2.legend(handles=legend_items, fontsize=9)
+    ax2b.legend(handles=legend_items, fontsize=8, loc="lower right")
+
     plt.tight_layout()
     chart2 = CHARTS_DIR / "cointegration_ranking.png"
     plt.savefig(chart2, dpi=150, bbox_inches="tight")

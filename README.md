@@ -3,6 +3,19 @@
 End-to-end pipeline for identifying, backtesting, and monitoring statistical arbitrage pairs
 across six S&P 500 technology stocks (MSFT, GOOGL, NVDA, AAPL, AMZN, META).
 
+## Project scope
+
+The project brief defined six objectives:
+
+1. Collect and pre-process daily OHLCV data for six large-cap S&P 500 technology stocks (2018–2025).
+2. Conduct exploratory data analysis: correlation, beta, and VIX sensitivity across all 15 pairs.
+3. Screen for cointegrated pairs using Engle-Granger and Johansen tests; backtest a pairs trading strategy with walk-forward analysis and sensitivity grids.
+4. ~~Sentiment analysis of financial news to augment the spread signal.~~ **Removed from scope** by the project supervisor on 21 September 2026. The pipeline is complete as Phases 1–6 without this component.
+5. Test the selected pairs on genuinely unseen 2026 data to evaluate out-of-sample mean reversion.
+6. Apply an LSTM model to predict the spread and gate Phase 4 entries via a convergence filter.
+
+The project is submitted as **Phases 1–6** (corresponding to `phase1_data.py` through `phase5_ml_spread.py` plus the FastAPI analyser app).
+
 ## Project layout
 
 ```
@@ -158,6 +171,8 @@ All numbers are from the current output CSVs (`outputs/reports/`).
 |------|-----------|---------------------|-------|------------|--------|
 | AMZN/META | 0.0143 | 17.54 | 15.49 | 0.60 | Primary (both) |
 | MSFT/AAPL | 0.2031 | 14.56 | 15.49 | 0.87 | Secondary (trace 10%) |
+
+AMZN/META ranks first by both the EG p-value (rank 1) and the Johansen ratio — trace stat / 5% CV = 1.13 (rank 1). The two methods diverge for lower-ranked pairs: MSFT/GOOGL ranks 15th by EG p-value but 4th by Johansen ratio, while NVDA/AMZN ranks 2nd by EG but 7th by Johansen.
 
 ### Backtesting strategy (Phase 3b, entry ±2σ, exit 0, stop ±3σ, cost 0.1%/leg)
 

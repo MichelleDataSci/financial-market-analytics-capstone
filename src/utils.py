@@ -12,8 +12,9 @@ DATA_RAW       = ROOT / "data" / "raw"
 DATA_PROCESSED = ROOT / "data" / "processed"
 CHARTS_DIR     = ROOT / "outputs" / "charts"
 REPORTS_DIR    = ROOT / "outputs" / "reports"
+MODELS_DIR     = ROOT / "models"
 
-for _dir in (DATA_RAW, DATA_PROCESSED, CHARTS_DIR, REPORTS_DIR):
+for _dir in (DATA_RAW, DATA_PROCESSED, CHARTS_DIR, REPORTS_DIR, MODELS_DIR):
     _dir.mkdir(parents=True, exist_ok=True)
 
 # ---------------------------------------------------------------------------

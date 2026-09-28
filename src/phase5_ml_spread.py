@@ -70,6 +70,7 @@ import sys
 import warnings
 import numpy as np
 import pandas as pd
+import joblib
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -88,7 +89,7 @@ from tensorflow import keras
 from tensorflow.keras import layers, callbacks
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from utils import DATA_RAW, CHARTS_DIR, REPORTS_DIR
+from utils import DATA_RAW, CHARTS_DIR, REPORTS_DIR, MODELS_DIR
 from phase3_strategy import (
     load_prices, build_open_spread, backtest, compute_metrics,
     extract_trade_log,
@@ -334,6 +335,54 @@ def persistence_baseline(X, y_true):
     result["Persist_RMSE_overall"] = float(np.sqrt(np.mean(all_err ** 2)))
     result["Persist_MAE_overall"]  = float(np.mean(np.abs(all_err)))
     return result
+
+
+# ---------------------------------------------------------------------------
+# Model artefact persistence (Task 3)
+# ---------------------------------------------------------------------------
+
+def save_artifacts(tag, model, hr, ic, mu, sigma):
+    """
+    Save final LSTM model and fitted OLS/scaler parameters to models/.
+
+    Files written:
+      models/{tag}_lstm_final.keras
+      models/{tag}_ols_params.joblib   — {"hedge_ratio": hr, "intercept": ic}
+      models/{tag}_scaler_params.joblib — {"mu": mu, "sigma": sigma}
+    """
+    model_path  = MODELS_DIR / f"{tag}_lstm_final.keras"
+    ols_path    = MODELS_DIR / f"{tag}_ols_params.joblib"
+    scaler_path = MODELS_DIR / f"{tag}_scaler_params.joblib"
+    model.save(model_path)
+    joblib.dump({"hedge_ratio": hr, "intercept": ic}, ols_path)
+    joblib.dump({"mu": mu, "sigma": sigma}, scaler_path)
+    print(f"  Artefacts saved:")
+    print(f"    {model_path}")
+    print(f"    {ols_path}")
+    print(f"    {scaler_path}")
+    return model_path, ols_path, scaler_path
+
+
+def load_artifacts(tag):
+    """
+    Load saved artefacts for a pair tag (e.g. 'AMZN_META').
+    Returns (model, ols_params, scaler_params) where:
+      ols_params    = {"hedge_ratio": float, "intercept": float}
+      scaler_params = {"mu": float, "sigma": float}
+    Raises FileNotFoundError if any file is missing.
+    """
+    model_path  = MODELS_DIR / f"{tag}_lstm_final.keras"
+    ols_path    = MODELS_DIR / f"{tag}_ols_params.joblib"
+    scaler_path = MODELS_DIR / f"{tag}_scaler_params.joblib"
+    for p in (model_path, ols_path, scaler_path):
+        if not p.exists():
+            raise FileNotFoundError(
+                f"Artefact not found: {p}\n"
+                "Run phase5_ml_spread.py first to generate saved models.")
+    model       = keras.models.load_model(model_path)
+    ols_params    = joblib.load(ols_path)
+    scaler_params = joblib.load(scaler_path)
+    return model, ols_params, scaler_params
 
 
 # ---------------------------------------------------------------------------
@@ -942,6 +991,22 @@ def run_phase5_final_2026(dep, indep, tests_passed):
     print(f"  Done: {epochs_f} epochs  |  "
           f"val MSE={best_val_f:.6f}  val RMSE={val_rmse_f:.4f} "
           f"[2025 validation, z_std units]")
+
+    # ------------------------------------------------------------------
+    # 5b. Save artefacts and verify round-trip load
+    # ------------------------------------------------------------------
+    save_artifacts(tag, model_f, hr_f, ic_f, mu_f, sigma_f)
+
+    # Verify: load back and compare predictions on one val sample
+    _model_chk, _ols_chk, _scl_chk = load_artifacts(tag)
+    _pred_orig = model_f.predict(X_va_f[:1], verbose=0)
+    _pred_load = _model_chk.predict(X_va_f[:1], verbose=0)
+    _max_diff  = float(np.max(np.abs(_pred_orig - _pred_load)))
+    assert _max_diff < 1e-5, f"Load round-trip mismatch: max diff={_max_diff}"
+    assert _ols_chk["hedge_ratio"] == hr_f and _ols_chk["intercept"] == ic_f
+    assert _scl_chk["mu"] == mu_f and _scl_chk["sigma"] == sigma_f
+    print(f"  Load round-trip verified (max pred diff={_max_diff:.2e})")
+    del _model_chk, _ols_chk, _scl_chk, _pred_orig, _pred_load
 
     # ------------------------------------------------------------------
     # 6. Download 2026 data and evaluate LSTM on 2026

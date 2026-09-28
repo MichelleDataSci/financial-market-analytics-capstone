@@ -1209,7 +1209,7 @@ def run_phase5_final_2026(dep, indep, tests_passed, refresh=False):
     # 10. Report comparison
     # ------------------------------------------------------------------
     REPORT_KEYS = [
-        ("Num_trades",            "Trades"),
+        ("Num_trades",            "Entries (incl. open)"),
         ("Total_PnL",             "Total net P&L"),
         ("Ann_PnL",               "Annual P&L"),
         ("Sharpe_ratio",          "Sharpe ratio"),
@@ -1230,14 +1230,16 @@ def run_phase5_final_2026(dep, indep, tests_passed, refresh=False):
         fmt_b = f"{vb:.4f}" if isinstance(vb, float) else str(vb)
         fmt_l = f"{vl:.4f}" if isinstance(vl, float) else str(vl)
         print(row_fmt.format(label, fmt_b, fmt_l))
-    # Win rate + completed-trade count (denominator)
-    wr_p4_s   = f"{wr_p4:.1f}%" if not (isinstance(wr_p4, float) and
-                                          np.isnan(wr_p4)) else "n/a"
-    wr_lstm_s = f"{wr_lstm:.1f}%" if not (isinstance(wr_lstm, float) and
-                                           np.isnan(wr_lstm)) else "n/a"
-    print(row_fmt.format("Completed-trade win rate", wr_p4_s, wr_lstm_s))
-    print(row_fmt.format("Completed trades (denom.)",
-                         str(n_comp_p4), str(n_comp_lstm)))
+    # Win rate: show "X% (n_completed/n_entries)" so the denominator is always visible
+    n_entries_p4   = m_p4.get("Num_trades",   0)
+    n_entries_lstm = m_lstm.get("Num_trades", 0)
+    def _wr_str(wr, n_comp, n_entries):
+        if isinstance(wr, float) and np.isnan(wr):
+            return f"n/a (0/{n_entries} completed)"
+        return f"{wr:.1f}% ({n_comp}/{n_entries} completed)"
+    wr_p4_s   = _wr_str(wr_p4,   n_comp_p4,   n_entries_p4)
+    wr_lstm_s = _wr_str(wr_lstm, n_comp_lstm, n_entries_lstm)
+    print(row_fmt.format("Win rate (completed only)", wr_p4_s, wr_lstm_s))
     print()
     print(f"    Signal counts:")
     blocked = (n_long_p4 + n_short_p4) - (n_long_lstm + n_short_lstm)
@@ -1301,13 +1303,13 @@ def run_phase5_final_2026(dep, indep, tests_passed, refresh=False):
     ax3a = fig3.add_subplot(gs3[0])
     ax3a.plot(bt_p4.index,   bt_p4["cum_pnl"],  color="steelblue", lw=1.2,
               label=(f"Phase 4 baseline: Sharpe={m_p4['Sharpe_ratio']:.2f}  "
-                     f"Trades={m_p4['Num_trades']}  "
-                     f"WinRate={wr_p4_s}  "
+                     f"Entries={m_p4['Num_trades']}  "
+                     f"WinRate(completed)={wr_p4_s}  "
                      f"P&L={m_p4['Total_PnL']:.4f}"))
     ax3a.plot(bt_lstm.index, bt_lstm["cum_pnl"], color="darkorange", lw=1.2, ls="--",
               label=(f"LSTM-enhanced: Sharpe={m_lstm['Sharpe_ratio']:.2f}  "
-                     f"Trades={m_lstm['Num_trades']}  "
-                     f"WinRate={wr_lstm_s}  "
+                     f"Entries={m_lstm['Num_trades']}  "
+                     f"WinRate(completed)={wr_lstm_s}  "
                      f"P&L={m_lstm['Total_PnL']:.4f}"))
     ax3a.axhline(0, color="grey", lw=0.5, ls=":")
     ax3a.set_ylabel("Cumulative net P&L (log-price units)", fontsize=9)
@@ -1383,22 +1385,22 @@ def run_phase5_final_2026(dep, indep, tests_passed, refresh=False):
         "P4_short_signals": n_short_p4,
         "LSTM_long_signals":  n_long_lstm,
         "LSTM_short_signals": n_short_lstm,
-        "P4_Sharpe":   m_p4.get("Sharpe_ratio"),
-        "P4_Trades":   m_p4.get("Num_trades"),
-        "P4_PnL":      m_p4.get("Total_PnL"),
-        "P4_MaxDD":    m_p4.get("Max_drawdown"),
-        "P4_WinRate":        round(wr_p4, 1) if not np.isnan(wr_p4) else None,
-        "P4_CompletedTrades": n_comp_p4,
-        "P4_AvgTrade":       m_p4.get("Avg_trade_PnL"),
-        "P4_InMkt":          m_p4.get("Pct_in_market"),
-        "LSTM_Sharpe":       m_lstm.get("Sharpe_ratio"),
-        "LSTM_Trades":       m_lstm.get("Num_trades"),
-        "LSTM_PnL":          m_lstm.get("Total_PnL"),
-        "LSTM_MaxDD":        m_lstm.get("Max_drawdown"),
-        "LSTM_WinRate":      round(wr_lstm, 1) if not np.isnan(wr_lstm) else None,
-        "LSTM_CompletedTrades": n_comp_lstm,
-        "LSTM_AvgTrade":     m_lstm.get("Avg_trade_PnL"),
-        "LSTM_InMkt":        m_lstm.get("Pct_in_market"),
+        "P4_Sharpe":              m_p4.get("Sharpe_ratio"),
+        "P4_Entries":             m_p4.get("Num_trades"),
+        "P4_PnL":                 m_p4.get("Total_PnL"),
+        "P4_MaxDD":               m_p4.get("Max_drawdown"),
+        "P4_CompletedWinRate":    round(wr_p4, 1) if not np.isnan(wr_p4) else None,
+        "P4_CompletedTrades":     n_comp_p4,
+        "P4_AvgTrade":            m_p4.get("Avg_trade_PnL"),
+        "P4_InMkt":               m_p4.get("Pct_in_market"),
+        "LSTM_Sharpe":            m_lstm.get("Sharpe_ratio"),
+        "LSTM_Entries":           m_lstm.get("Num_trades"),
+        "LSTM_PnL":               m_lstm.get("Total_PnL"),
+        "LSTM_MaxDD":             m_lstm.get("Max_drawdown"),
+        "LSTM_CompletedWinRate":  round(wr_lstm, 1) if not np.isnan(wr_lstm) else None,
+        "LSTM_CompletedTrades":   n_comp_lstm,
+        "LSTM_AvgTrade":          m_lstm.get("Avg_trade_PnL"),
+        "LSTM_InMkt":             m_lstm.get("Pct_in_market"),
     }
 
 
@@ -1555,23 +1557,26 @@ def main():
         print(f"{'='*65}")
         col_w = 12
         hdr2 = (f"  {'Pair':<12}  {'TestRMSE':>{col_w}}  {'P4 Sharpe':>{col_w}}  "
-                f"{'LSTM Sharpe':>{col_w}}  {'P4 Trades':>{col_w}}  "
-                f"{'LSTM Trades':>{col_w}}  {'P4 WinRate':>{col_w}}  "
-                f"{'LSTM WinRate':>{col_w}}")
+                f"{'LSTM Sharpe':>{col_w}}  {'P4 Entries':>{col_w}}  "
+                f"{'LSTM Entries':>{col_w}}  {'P4 WinRate*':>{col_w}}  "
+                f"{'LSTM WinRate*':>{col_w}}")
         print(hdr2)
         print("-" * len(hdr2))
         for r in final_rows:
-            wr_p  = f"{r['P4_WinRate']:.1f}%" if r.get("P4_WinRate") is not None \
-                    else "n/a"
-            wr_l  = f"{r['LSTM_WinRate']:.1f}%" if r.get("LSTM_WinRate") is not None \
-                    else "n/a"
+            wr_p = (f"{r['P4_CompletedWinRate']:.1f}%"
+                    f"({r['P4_CompletedTrades']}/{r['P4_Entries']})"
+                    if r.get("P4_CompletedWinRate") is not None else "n/a")
+            wr_l = (f"{r['LSTM_CompletedWinRate']:.1f}%"
+                    f"({r['LSTM_CompletedTrades']}/{r['LSTM_Entries']})"
+                    if r.get("LSTM_CompletedWinRate") is not None else "n/a")
             print(f"  {r['Pair']:<12}  "
                   f"{r['Test_RMSE_2026']:>{col_w}.4f}  "
                   f"{r['P4_Sharpe']:>{col_w}.4f}  "
                   f"{r['LSTM_Sharpe']:>{col_w}.4f}  "
-                  f"{r['P4_Trades']:>{col_w}}  "
-                  f"{r['LSTM_Trades']:>{col_w}}  "
+                  f"{r['P4_Entries']:>{col_w}}  "
+                  f"{r['LSTM_Entries']:>{col_w}}  "
                   f"{wr_p:>{col_w}}  {wr_l:>{col_w}}")
+        print("  * Win rate over completed (closed) trades only; open trades excluded.")
         print(f"\n  Saved -> {final_csv.name}")
 
     print(f"\n{'='*65}")

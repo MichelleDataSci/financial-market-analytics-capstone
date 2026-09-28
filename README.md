@@ -263,7 +263,7 @@ All OHLCV data is sourced from [Yahoo Finance](https://finance.yahoo.com/) via t
 | [NumPy](https://numpy.org/) | Numerical arrays and linear algebra | https://numpy.org/ |
 | [statsmodels](https://www.statsmodels.org/) | Engle-Granger `coint()`, Johansen test, VAR lag selection | https://www.statsmodels.org/ |
 | [TensorFlow / Keras](https://www.tensorflow.org/) | LSTM model training and inference | https://www.tensorflow.org/ |
-| [scikit-learn / joblib](https://scikit-learn.org/) | Artefact serialisation (`.joblib`) | https://scikit-learn.org/ |
+| [joblib](https://joblib.readthedocs.io/) | Artefact serialisation (`.joblib`) | https://joblib.readthedocs.io/ |
 | [FastAPI](https://fastapi.tiangolo.com/) | Web application and REST API | https://fastapi.tiangolo.com/ |
 | [matplotlib](https://matplotlib.org/) | All charts and figures | https://matplotlib.org/ |
 | [seaborn](https://seaborn.pydata.org/) | Heatmap and styled plots | https://seaborn.pydata.org/ |

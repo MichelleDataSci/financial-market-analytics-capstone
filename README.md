@@ -51,7 +51,7 @@ The work is delivered as **Phases 1–6** per the phase breakdown: Phase 1 (data
 pip install -r requirements.txt
 ```
 
-For exact reproduction of all outputs, use the pinned versions:
+For exact reproduction of all outputs and a warnings-free run, use the pinned versions:
 
 ```bash
 pip install -r requirements_exact.txt

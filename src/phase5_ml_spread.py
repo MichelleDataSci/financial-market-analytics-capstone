@@ -77,7 +77,6 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import statsmodels.api as sm
-import yfinance as yf
 from pathlib import Path
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"]    = "3"
@@ -90,7 +89,7 @@ from tensorflow import keras
 from tensorflow.keras import layers, callbacks
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from utils import DATA_RAW, CHARTS_DIR, REPORTS_DIR, MODELS_DIR, load_or_download_2026
+from utils import CHARTS_DIR, REPORTS_DIR, MODELS_DIR, load_or_download_2026
 from phase3_strategy import (
     load_prices, build_open_spread, backtest, compute_metrics,
     extract_trade_log,
@@ -942,7 +941,6 @@ def run_phase5_final_2026(dep, indep, tests_passed, refresh=False):
     close_df, open_df, log_close, log_open = load_prices(dep, indep)
     # Restrict to pre-2026 training data for all fitting
     log_close_pre26 = log_close.loc[log_close.index <= FINAL_VAL_END]
-    log_open_pre26  = log_open.loc[log_open.index <= FINAL_VAL_END]
 
     hr_f, ic_f, r2_f = fit_ols(log_close_pre26, dep, indep,
                                  end_date=FINAL_TRAIN_END)
@@ -1058,7 +1056,6 @@ def run_phase5_final_2026(dep, indep, tests_passed, refresh=False):
     mask_te  = idx_te_all >= pd.Timestamp(P4_TEST_START)
     X_te_f   = X_te_all[mask_te]
     y_te_f   = y_te_all[mask_te]
-    idx_te_f = idx_te_all[mask_te]
     y_pred_f     = model_f.predict(X_te_f, verbose=0)
     eval_f       = evaluate_predictions(y_te_f, y_pred_f)
     persist_f    = persistence_baseline(X_te_f, y_te_f)

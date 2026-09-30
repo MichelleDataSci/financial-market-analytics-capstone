@@ -161,6 +161,81 @@ class TestApiAnalyseEndpoint:
         assert resp.status_code == 422
         assert "Date" in resp.json()["detail"]
 
+    def test_zero_price_returns_422(self):
+        """A CSV with only a handful of valid rows (after zero-price rows are dropped)
+        should fall below MIN_ROWS and return 422."""
+        # 65 rows total, last 10 have y=0 → only 55 finite rows < MIN_ROWS=60
+        n = 65
+        dates = pd.bdate_range("2018-01-02", periods=n)
+        x = np.cumsum(_RNG.standard_normal(n)) + 100
+        y = np.cumsum(_RNG.standard_normal(n)) + 80
+        y[55:] = 0.0  # 10 rows become non-finite after log
+        df = pd.DataFrame({"Date": dates, "AssetA": x, "AssetB": y}).set_index("Date")
+        resp = client.post(
+            "/api/analyse",
+            files={"file": ("zero.csv", _make_csv(df), "text/csv")},
+            data={"ticker1": "", "ticker2": ""},
+        )
+        assert resp.status_code == 422
+
+    def test_negative_price_returns_422(self):
+        """A CSV with only a handful of valid rows (after negative-price rows are dropped)
+        should fall below MIN_ROWS and return 422."""
+        # 65 rows total, last 10 have y<0 → only 55 finite rows < MIN_ROWS=60
+        n = 65
+        dates = pd.bdate_range("2018-01-02", periods=n)
+        x = np.cumsum(_RNG.standard_normal(n)) + 100
+        y = np.cumsum(_RNG.standard_normal(n)) + 80
+        y[55:] = -5.0
+        df = pd.DataFrame({"Date": dates, "AssetA": x, "AssetB": y}).set_index("Date")
+        resp = client.post(
+            "/api/analyse",
+            files={"file": ("neg.csv", _make_csv(df), "text/csv")},
+            data={"ticker1": "", "ticker2": ""},
+        )
+        assert resp.status_code == 422
+
+    def test_single_zero_price_row_succeeds(self):
+        """A 200-row CSV with one zero price should return 200, not 500.
+        The non-finite-row fix drops the one bad row and continues with 199 rows."""
+        n = 200
+        dates = pd.bdate_range("2018-01-02", periods=n)
+        x = np.cumsum(_RNG.standard_normal(n)) + 100
+        y = 0.8 * x + _RNG.standard_normal(n) * 0.5
+        y[100] = 0.0  # single zero — used to raise unhandled 500
+        df = pd.DataFrame({"Date": dates, "AssetA": x, "AssetB": y}).set_index("Date")
+        resp = client.post(
+            "/api/analyse",
+            files={"file": ("one_zero.csv", _make_csv(df), "text/csv")},
+            data={"ticker1": "", "ticker2": ""},
+        )
+        assert resp.status_code == 200
+
+    def test_reverse_ordered_csv_same_result_as_sorted(self):
+        """A reverse-date CSV (newest first) should produce the same analysis as sorted."""
+        dates = pd.bdate_range("2018-01-02", periods=200)
+        x = np.cumsum(_RNG.standard_normal(200)) + 100
+        y = 0.8 * x + _RNG.standard_normal(200) * 0.5
+        df_fwd = pd.DataFrame({"Date": dates, "AssetA": x, "AssetB": y}).set_index("Date")
+        df_rev = df_fwd[::-1]  # reverse row order
+
+        resp_fwd = client.post(
+            "/api/analyse",
+            files={"file": ("fwd.csv", _make_csv(df_fwd), "text/csv")},
+            data={"ticker1": "", "ticker2": ""},
+        )
+        resp_rev = client.post(
+            "/api/analyse",
+            files={"file": ("rev.csv", _make_csv(df_rev), "text/csv")},
+            data={"ticker1": "", "ticker2": ""},
+        )
+        assert resp_fwd.status_code == 200
+        assert resp_rev.status_code == 200
+        data_fwd = resp_fwd.json()
+        data_rev = resp_rev.json()
+        assert data_fwd["is_cointegrated"] == data_rev["is_cointegrated"]
+        assert abs(data_fwd["engle_granger"]["eg_pval"] - data_rev["engle_granger"]["eg_pval"]) < 1e-8
+
 
 class TestCachedTickerPairs:
     """Integration tests using cached data from data/raw/."""

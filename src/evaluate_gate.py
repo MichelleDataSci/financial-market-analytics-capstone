@@ -45,7 +45,7 @@ from sklearn.metrics import (
 )
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from utils import REPORTS_DIR, CHARTS_DIR, MODELS_DIR
+from utils import REPORTS_DIR, CHARTS_DIR
 from predict import load_artefacts, build_features, load_log_close
 
 # Must match phase5_ml_spread.py / predict.py
@@ -107,8 +107,6 @@ def build_eval_arrays(dep, indep, model, ols, scaler):
 
     # Bar i: sequence = feat_df[i-SEQ_LEN : i], current bar = feat_df[i-1]
     eval_bars = list(range(SEQ_LEN, n - HORIZON))
-    N = len(eval_bars)
-
     X = np.stack([
         feat_df.iloc[i - SEQ_LEN : i].values.astype("float32")
         for i in eval_bars

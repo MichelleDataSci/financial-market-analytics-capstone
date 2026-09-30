@@ -30,6 +30,7 @@ The work is delivered as **Phases 1–6** per the phase breakdown: Phase 1 (data
 │   ├── phase4_unseen.py        # mean-reversion test on genuinely unseen 2026 data
 │   ├── phase5_ml_spread.py     # LSTM spread prediction + Step 8 2026 comparison
 │   ├── evaluate_gate.py        # gate classification metrics + feature importance
+│   ├── predict.py              # load saved artefacts and score new observations
 │   └── utils.py                # shared constants & paths
 ├── app/
 │   ├── main.py                 # FastAPI application
@@ -38,7 +39,7 @@ The work is delivered as **Phases 1–6** per the phase breakdown: Phase 1 (data
 ├── outputs/
 │   ├── charts/                 # saved figures (named by pair)
 │   └── reports/                # exported tables / summary CSVs
-├── tests/                      # pytest suite (66 tests)
+├── tests/                      # pytest suite (92 tests)
 ├── requirements.txt
 ├── requirements_exact.txt      # pinned versions for exact reproduction
 └── README.md
@@ -64,7 +65,7 @@ Run scripts in order — each phase depends on outputs from the previous:
 # Phase 1 — download and build master_data.csv (requires internet)
 python src/phase1_data.py
 
-# Phase 2 — exploratory analysis: 15 charts + tables
+# Phase 2 — exploratory analysis: 11 charts and 4 tables
 python src/phase2_eda.py
 
 # Phase 3a — cointegration screening → selected_pairs.csv
@@ -111,7 +112,7 @@ Reads saved artefacts from `models/` and cached raw prices from `data/raw/`. Req
 python -m pytest tests/ -v
 ```
 
-88 tests covering the backtesting engine (Phase 3b), Phase 5 utilities, predict utilities, convergence gate evaluation, and the FastAPI app.
+92 tests covering the backtesting engine (Phase 3b), Phase 5 utilities, predict utilities, convergence gate evaluation, and the FastAPI app.
 
 ## FastAPI deployment
 
@@ -136,7 +137,7 @@ Then open `http://127.0.0.1:8000` in your browser.
 
 **Input (either option):**
 - **Cached data** — choose two tickers from the dropdown (AAPL, AMZN, GOOGL, META, MSFT, NVDA).
-- **CSV upload** — a file with a `Date` column and two numeric price columns (minimum 60 rows).
+- **CSV upload** — a file with a `Date` column and two numeric price columns (minimum 60 rows). CSV backtests use close-to-close prices; cached tickers execute signals at the next open price.
 
 **Output (HTML results page):**
 - Cointegration table — Engle-Granger (`coint()` p-value) and Johansen trace / max-eigenvalue statistics with pass/fail flags at 5% and 10%.
@@ -183,9 +184,9 @@ AMZN/META ranks first by both the EG p-value (rank 1) and the Johansen ratio —
 | Pair | Period | Sharpe | Sharpe 95% CI | Total P&L | Max drawdown | WF profitable years |
 |------|--------|--------|---------------|-----------|--------------|---------------------|
 | AMZN/META | Train 2018–2021 | 0.56 | (−0.25, 1.37) | — | — | — |
-| AMZN/META | Test 2022–2025 | 0.12 | (−0.74, 1.01) | +0.138 | −0.588 | 4/8 |
+| AMZN/META | Test 2022–2025 | 0.12 | (−0.74, 1.01) | +0.138 | −0.588 | 4/7 |
 | MSFT/AAPL | Train 2018–2021 | 0.25 | (−0.71, 1.08) | — | — | — |
-| MSFT/AAPL | Test 2022–2025 | −0.23 | (−1.16, 0.71) | −0.133 | −0.453 | 4/8 |
+| MSFT/AAPL | Test 2022–2025 | −0.23 | (−1.16, 0.71) | −0.133 | −0.453 | 4/7 |
 
 AMZN/META shows a positive out-of-sample Sharpe but the confidence interval spans zero. MSFT/AAPL is negative on the test set.
 
@@ -281,6 +282,7 @@ Current z-score (`z_std`) dominates — shuffling it roughly doubles the RMSE. L
 | `outputs/reports/phase4_cross_pair_summary.csv` | Phase 4 signal summary and mean-reversion verdict |
 | `outputs/reports/phase5_cross_pair_final_summary.csv` | Phase 5 definitive 2026 LSTM vs Phase 4 baseline |
 | `outputs/reports/gate_metrics.csv` | LSTM gate classification metrics vs naive baseline (all pairs / periods) |
+| `outputs/reports/nvda_subperiod_results.csv` | Cointegration screen for the five NVDA pairs restricted to 2018-2022 (structural-break check) |
 | `outputs/reports/feature_importance_{pair}.csv` | Permutation feature importance per pair |
 | `outputs/charts/confusion_matrix_{pair}_{period}.png` | Confusion matrix per pair and evaluation period |
 | `outputs/charts/feature_importance_{pair}.png` | Feature importance bar chart per pair |

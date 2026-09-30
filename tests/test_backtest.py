@@ -18,7 +18,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from phase3_strategy import (backtest, compute_metrics, build_spread_zscore,
-                              block_bootstrap_sharpe, extract_trade_log)
+                              extract_trade_log)
 
 
 # ---------------------------------------------------------------------------

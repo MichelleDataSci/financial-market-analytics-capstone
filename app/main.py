@@ -127,6 +127,7 @@ def _parse_uploaded_csv(contents: bytes) -> tuple[pd.DataFrame, str, str]:
     except Exception:
         raise ValueError("Could not parse 'Date' column as dates.")
     raw = raw.set_index("Date")
+    raw = raw.sort_index()
     price_cols = raw.select_dtypes(include="number").columns.tolist()
     if len(price_cols) < 2:
         raise ValueError(
@@ -196,6 +197,11 @@ def run_analysis(
         )
 
     log_df = np.log(close_df)
+    log_df = log_df[np.isfinite(log_df).all(axis=1)]
+    if len(log_df) < MIN_ROWS:
+        raise ValueError(
+            f"Need at least {MIN_ROWS} finite-price rows after alignment; got {len(log_df)}."
+        )
     log_a, log_b = log_df[ticker1], log_df[ticker2]
 
     # pick_direction: choose the OLS direction with more stationary residuals.

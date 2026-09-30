@@ -1,6 +1,6 @@
-﻿"""
+"""
 Phase 2 -- Exploratory Data Analysis
-Loads master_data.csv and produces 8 analyses/charts saved to outputs/.
+Loads master_data.csv and produces 11 charts and 4 tables saved to outputs/.
 """
 
 import sys
@@ -354,7 +354,7 @@ for ticker in ALL_TICKERS:
 ax.plot(sp500_cum.index, sp500_cum.values, label="S&P 500",
         color="black", lw=2.2, ls="--")
 ax.axhline(100, color="grey", lw=0.5, ls=":", alpha=0.5)
-ax.set_title("Cumulative Returns vs S&P 500 Benchmark â€” Base 100 at 2018-01-03",
+ax.set_title("Cumulative Returns vs S&P 500 Benchmark - Base 100 at 2018-01-03",
              fontsize=13, fontweight="bold")
 ax.set_ylabel("Index (Start = 100)")
 ax.set_xlabel("Date")
@@ -369,12 +369,12 @@ print(f"  Saved -> outputs/charts/cumulative_vs_benchmark.png")
 # ---------------------------------------------------------------------------
 # 12 -- Rolling 60-day correlations (top 6 pairs by average correlation)
 # ---------------------------------------------------------------------------
-print("\n[12/14] Rolling 60-day correlation â€” top 6 pairs ...")
+print("\n[12/14] Rolling 60-day correlation - top 6 pairs ...")
 
 top6_pairs = pair_corr_df.head(6)[["Stock A", "Stock B"]].values.tolist()
 
 fig, axes = plt.subplots(2, 3, figsize=(18, 8))
-fig.suptitle("60-Day Rolling Return Correlation â€” Top 6 Pairs (2018-2025)",
+fig.suptitle("60-Day Rolling Return Correlation - Top 6 Pairs (2018-2025)",
              fontsize=13, fontweight="bold")
 
 for ax, (t1, t2) in zip(axes.flat, top6_pairs):
@@ -439,7 +439,7 @@ vix_df.to_csv(REPORTS_DIR / "vix_sensitivity.csv")
 print(vix_df.to_string())
 print(f"  Saved -> outputs/reports/vix_sensitivity.csv")
 
-# VIX sensitivity chart â€” 3 panels
+# VIX sensitivity chart - 3 panels
 fig, (ax_corr, ax_ret, ax_vol) = plt.subplots(1, 3, figsize=(16, 5))
 fig.suptitle(f"VIX Sensitivity Analysis (High VIX = level > {VIX_THRESHOLD})",
              fontsize=13, fontweight="bold")
@@ -497,13 +497,49 @@ print(f"  Saved -> outputs/charts/vix_sensitivity.png")
 # ---------------------------------------------------------------------------
 print("\n[14/14] EDA Conclusion ...")
 
+# --- computed values for conclusion ---
+_amzn_meta_r = float(
+    pair_corr_df.loc[pair_corr_df["Pair"] == "AMZN / META", "Correlation"].iloc[0]
+)
+_msft_googl_r = float(
+    pair_corr_df.loc[pair_corr_df["Pair"] == "MSFT / GOOGL", "Correlation"].iloc[0]
+)
+_lr = stats.linregress(prices["MSFT"], prices["AAPL"])
+_msft_aapl_r = float(_lr.rvalue)
+_msft_aapl_r2 = _msft_aapl_r ** 2
+
+_nvda = prices["NVDA"]
+_nvda_mid23 = _nvda.loc["2023-07-01":].iloc[0]
+_nvda_end = _nvda.iloc[-1]
+_nvda_surge = _nvda_end / _nvda_mid23
+
+_nvda_2021_end = _nvda.loc[:"2021-12-31"].iloc[-1]
+_nvda_2022_end = _nvda.loc[:"2022-12-31"].iloc[-1]
+_nvda_2022_fall_pct = (_nvda_2022_end / _nvda_2021_end - 1) * 100
+
+_meta = prices["META"]
+_meta_2021_end = _meta.loc[:"2021-12-31"].iloc[-1]
+_meta_2022_end = _meta.loc[:"2022-12-31"].iloc[-1]
+_meta_2022_fall_pct = (_meta_2022_end / _meta_2021_end - 1) * 100
+
+_amzn = prices["AMZN"]
+_amzn_2021_end = _amzn.loc[:"2021-12-31"].iloc[-1]
+_amzn_2022_end = _amzn.loc[:"2022-12-31"].iloc[-1]
+_amzn_2022_fall_pct = (_amzn_2022_end / _amzn_2021_end - 1) * 100
+
+print(f"  [conclusion] AMZN/META r={_amzn_meta_r:.4f}  MSFT/GOOGL r={_msft_googl_r:.4f}")
+print(f"  [conclusion] MSFT/AAPL r={_msft_aapl_r:.4f}  R2={_msft_aapl_r2:.4f}")
+print(f"  [conclusion] NVDA surge from mid-2023: {_nvda_surge:.1f}x")
+print(f"  [conclusion] NVDA 2022 fall: {_nvda_2022_fall_pct:.0f}%  "
+      f"META: {_meta_2022_fall_pct:.0f}%  AMZN: {_amzn_2022_fall_pct:.0f}%")
+
 conclusion = (
     "\nEDA CONCLUSION -- PHASE 2 SUMMARY\n"
     "==================================\n\n"
     "Based on eight years (2018-2025) of daily data for six S&P 500 tech stocks:\n\n"
     "RETURN STATISTICS:\n"
     "  - NVDA dominates in both return (0.233%/day) and volatility (48.3% ann.).\n"
-    "    Its AI/GPU-driven 37x price surge from mid-2023 makes it a poor candidate\n"
+    f"    Its AI/GPU-driven {_nvda_surge:.1f}x price surge from mid-2023 makes it a poor candidate\n"
     "    for any stable long-term pair relationship.\n"
     "  - META shows extreme kurtosis (18.12), driven by its Feb-2022 single-day\n"
     "    -26% collapse. Any META-involving pair carries asymmetric spread-gap risk.\n\n"
@@ -522,18 +558,19 @@ conclusion = (
     "    correlation spikes during the 2020 COVID crash and 2022 bear market,\n"
     "    and troughs in 2023-2024 as NVDA decoupled from peers.\n\n"
     "PAIRS MOST LIKELY TO BE COINTEGRATED (EDA view):\n"
-    "  1. AMZN/META -- moderate return correlation (0.57), both driven by\n"
+    f"  1. AMZN/META -- moderate return correlation ({_amzn_meta_r:.2f}), both driven by\n"
     "     consumer/advertiser cycle. Neither has undergone the AI structural break\n"
     "     seen in NVDA. Price scatter shows a reasonable linear trend.\n"
-    "  2. MSFT/AAPL -- highest price-level R^2 (0.966), similar betas, stable\n"
+    f"  2. MSFT/AAPL -- price-level r={_msft_aapl_r:.3f} (R^2={_msft_aapl_r2:.3f}), similar betas, stable\n"
     "     rolling correlation over time.\n"
-    "  3. MSFT/GOOGL -- highest return correlation (0.709), similar business\n"
+    f"  3. MSFT/GOOGL -- highest return correlation ({_msft_googl_r:.3f}), similar business\n"
     "     models (search, cloud, enterprise SaaS).\n\n"
     "CAUTION FLAGS:\n"
     "  - NVDA pairs: expected to fail cointegration due to the AI-driven\n"
     "    structural break from mid-2023.\n"
     "  - 2022 bear market is the critical stress test for all backtests.\n"
-    "    META fell 65%, AMZN 50%, NVDA 55% in that calendar year.\n"
+    f"    META fell {abs(_meta_2022_fall_pct):.0f}%, AMZN {abs(_amzn_2022_fall_pct):.0f}%,"
+    f" NVDA {abs(_nvda_2022_fall_pct):.0f}% in that calendar year.\n"
 )
 
 print(conclusion)

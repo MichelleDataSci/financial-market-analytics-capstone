@@ -252,10 +252,10 @@ def run_analysis(
         "ticker2": ticker2,
         "dep":     dep,
         "indep":   indep,
-        "n_obs":   len(close_df),
+        "n_obs":   len(log_df),
         "date_range": {
-            "start": str(close_df.index[0].date()),
-            "end":   str(close_df.index[-1].date()),
+            "start": str(log_df.index[0].date()),
+            "end":   str(log_df.index[-1].date()),
         },
         "engle_granger": eg,
         "johansen":      jo,

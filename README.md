@@ -93,6 +93,8 @@ python src/evaluate_gate.py
   Pass `--refresh` to Phase 4 to re-download: `python src/phase4_unseen.py --refresh`.
 - Phase 5 trains two LSTM models per pair and takes several minutes on CPU.
 - All scripts print UTF-8 output; no `-X utf8` flag is required on Windows.
+- An internet connection is only needed on the first run, or when `--refresh` is passed.
+  If `data/raw/` already contains all cached CSVs, the entire pipeline runs fully offline.
 
 ## Predict (inference only)
 
@@ -309,3 +311,7 @@ All OHLCV data is sourced from [Yahoo Finance](https://finance.yahoo.com/) via t
 | [FastAPI](https://fastapi.tiangolo.com/) | Web application and REST API | https://fastapi.tiangolo.com/ |
 | [matplotlib](https://matplotlib.org/) | All charts and figures | https://matplotlib.org/ |
 | [seaborn](https://seaborn.pydata.org/) | Heatmap and styled plots | https://seaborn.pydata.org/ |
+
+statsmodels, TensorFlow/Keras, and scikit-learn are third-party libraries distributed under
+their respective open-source licenses (BSD-3-Clause, Apache 2.0, and BSD-3-Clause). Their use
+here does not imply any affiliation with or endorsement by those projects.

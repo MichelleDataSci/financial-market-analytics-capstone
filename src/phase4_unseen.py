@@ -19,7 +19,8 @@ Key differences from Phase 3b:
 """
 
 import sys
-sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -62,10 +63,10 @@ def run_phase4_pair(dep, indep, tests_passed, refresh=False):
     print(f"  Test period     : {TEST_START} to {TEST_END} (unseen data)")
     print(f"  Entry signal    : |Z| > {Z_ENTRY}")
     print(f"  Exit signal     : Z crosses {Z_EXIT}")
-    print(f"  Execution       : signal observed at close(t-1); position entered at open(t)")
+    print("  Execution       : signal observed at close(t-1); position entered at open(t)")
 
     # ── Step 2: Load full training history and fit OLS ──
-    print(f"\n  [Step 2] Fitting OLS on full training period 2018-2025 ...")
+    print("\n  [Step 2] Fitting OLS on full training period 2018-2025 ...")
     train_prices = {}
     for ticker in [dep, indep]:
         path = DATA_RAW / f"{ticker}_raw.csv"
@@ -137,7 +138,7 @@ def run_phase4_pair(dep, indep, tests_passed, refresh=False):
     z_arr  = zscore.values
     n      = len(z_arr)
 
-    print(f"\n  [Step 5] Z-score statistics:")
+    print("\n  [Step 5] Z-score statistics:")
     print(f"    Min  : {zscore.min():.4f}")
     print(f"    Max  : {zscore.max():.4f}")
     print(f"    Mean : {zscore.mean():.4f}  (near 0 if stationary)")
@@ -156,8 +157,8 @@ def run_phase4_pair(dep, indep, tests_passed, refresh=False):
     #   Signal_Z_score  -- z_prev; the z-score that triggered the action
     #   Current_Z_score -- z_curr; today's z-score (for observation, not decision)
     #   Position / Signal -- position held and action label after execution
-    print(f"\n  [Step 7] Trading signals "
-          f"(Signal_Z_score = z at close(t-1); Execution_Date = open(t)) ...")
+    print("\n  [Step 7] Trading signals "
+          "(Signal_Z_score = z at close(t-1); Execution_Date = open(t)) ...")
     position      = np.zeros(n, dtype=int)   # position[0] = 0 (flat)
     pos           = 0
     long_entries  = []
@@ -238,12 +239,12 @@ def run_phase4_pair(dep, indep, tests_passed, refresh=False):
           f"({n_in_mkt / n * 100:.1f}%)")
 
     if long_entries:
-        print(f"    Long execution dates (Signal_Z_score = z at prior close):")
+        print("    Long execution dates (Signal_Z_score = z at prior close):")
         for e in long_entries:
             print(f"      exec {e['Execution_Date'].date()}  "
                   f"[signal {e['Signal_Date'].date()}: Z={e['Z_score']:+.4f}]")
     if short_entries:
-        print(f"    Short execution dates (Signal_Z_score = z at prior close):")
+        print("    Short execution dates (Signal_Z_score = z at prior close):")
         for e in short_entries:
             print(f"      exec {e['Execution_Date'].date()}  "
                   f"[signal {e['Signal_Date'].date()}: Z={e['Z_score']:+.4f}]")
@@ -291,7 +292,7 @@ def run_phase4_pair(dep, indep, tests_passed, refresh=False):
     print(f"  Summary saved   -> {summary_csv.name}")
 
     # ── Step 6: Chart ──
-    print(f"\n  [Step 6] Generating Z-score chart ...")
+    print("\n  [Step 6] Generating Z-score chart ...")
     fig = plt.figure(figsize=(16, 11))
     gs  = gridspec.GridSpec(3, 1, hspace=0.45, figure=fig)
 
@@ -372,62 +373,68 @@ def run_phase4_pair(dep, indep, tests_passed, refresh=False):
 # ---------------------------------------------------------------------------
 # Main — read selected pairs and run Phase 4 for each
 # ---------------------------------------------------------------------------
-import argparse as _argparse
-_parser = _argparse.ArgumentParser(description="Phase 4: unseen 2026 data evaluation")
-_parser.add_argument("--refresh", action="store_true",
-                     help="Re-download 2026 data and overwrite cached files in data/raw/")
-_args = _parser.parse_args()
 
-print("=" * 65)
-print("PHASE 4 -- TESTING MEAN REVERSION ON UNSEEN DATA")
-print("=" * 65)
-print(f"\n  Training period : 2018-01-01 to {TRAIN_END}")
-print(f"  Norm window     : {NORM_START} to {TRAIN_END}")
-print(f"  Test period     : {TEST_START} to {TEST_END}")
-print(f"  Entry |Z| > {Z_ENTRY}, exit Z crosses {Z_EXIT}")
-if _args.refresh:
-    print("  --refresh: will re-download 2026 data from yfinance")
+def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Phase 4: unseen 2026 data evaluation")
+    parser.add_argument("--refresh", action="store_true",
+                        help="Re-download 2026 data and overwrite cached files in data/raw/")
+    args = parser.parse_args()
 
-selected_csv = REPORTS_DIR / "selected_pairs.csv"
-if selected_csv.exists():
-    sel_df = pd.read_csv(selected_csv)
-    pair_list = [
-        (row["OLS_direction"].split("~")[0],
-         row["OLS_direction"].split("~")[1],
-         row["Tests_passed"])
-        for _, row in sel_df.iterrows()
-    ]
-    print(f"\nLoaded {len(pair_list)} pair(s) from {selected_csv.name}:")
-    for dep, indep, tp in pair_list:
-        print(f"  {dep}/{indep}  [{tp}]")
-else:
-    pair_list = [("AMZN", "META", "Both")]
-    print(f"\nWARNING: {selected_csv.name} not found — falling back to AMZN/META.")
-    print("Run phase3_cointegration.py first to generate selected_pairs.csv.")
+    print("=" * 65)
+    print("PHASE 4 -- TESTING MEAN REVERSION ON UNSEEN DATA")
+    print("=" * 65)
+    print(f"\n  Training period : 2018-01-01 to {TRAIN_END}")
+    print(f"  Norm window     : {NORM_START} to {TRAIN_END}")
+    print(f"  Test period     : {TEST_START} to {TEST_END}")
+    print(f"  Entry |Z| > {Z_ENTRY}, exit Z crosses {Z_EXIT}")
+    if args.refresh:
+        print("  --refresh: will re-download 2026 data from yfinance")
 
-# Run all pairs
-summary_rows = []
-for dep, indep, tests_passed in pair_list:
-    result = run_phase4_pair(dep, indep, tests_passed, refresh=_args.refresh)
-    if result is not None:
-        summary_rows.append(result)
+    selected_csv = REPORTS_DIR / "selected_pairs.csv"
+    if selected_csv.exists():
+        sel_df = pd.read_csv(selected_csv)
+        pair_list = [
+            (row["OLS_direction"].split("~")[0],
+             row["OLS_direction"].split("~")[1],
+             row["Tests_passed"])
+            for _, row in sel_df.iterrows()
+        ]
+        print(f"\nLoaded {len(pair_list)} pair(s) from {selected_csv.name}:")
+        for dep, indep, tp in pair_list:
+            print(f"  {dep}/{indep}  [{tp}]")
+    else:
+        pair_list = [("AMZN", "META", "Both")]
+        print(f"\nWARNING: {selected_csv.name} not found — falling back to AMZN/META.")
+        print("Run phase3_cointegration.py first to generate selected_pairs.csv.")
 
-# Cross-pair summary
-if summary_rows:
-    cross_df  = pd.DataFrame(summary_rows)
-    cross_csv = REPORTS_DIR / "phase4_cross_pair_summary.csv"
-    cross_df.to_csv(cross_csv, index=False)
+    # Run all pairs
+    summary_rows = []
+    for dep, indep, tests_passed in pair_list:
+        result = run_phase4_pair(dep, indep, tests_passed, refresh=args.refresh)
+        if result is not None:
+            summary_rows.append(result)
+
+    # Cross-pair summary
+    if summary_rows:
+        cross_df  = pd.DataFrame(summary_rows)
+        cross_csv = REPORTS_DIR / "phase4_cross_pair_summary.csv"
+        cross_df.to_csv(cross_csv, index=False)
+
+        print(f"\n{'='*65}")
+        print("PHASE 4 -- CROSS-PAIR SUMMARY")
+        print(f"{'='*65}")
+        display_cols = ["Pair", "Tests_passed", "Z_mean", "Z_std",
+                        "Long_signals", "Short_signals", "Total_signals",
+                        "Pct_in_mkt", "Verdict"]
+        print(cross_df[display_cols].to_string(index=False))
+        print(f"\nCross-pair summary saved -> {cross_csv}")
 
     print(f"\n{'='*65}")
-    print("PHASE 4 -- CROSS-PAIR SUMMARY")
+    print("PHASE 4 COMPLETE")
     print(f"{'='*65}")
-    display_cols = ["Pair", "Tests_passed", "Z_mean", "Z_std",
-                    "Long_signals", "Short_signals", "Total_signals",
-                    "Pct_in_mkt", "Verdict"]
-    print(cross_df[display_cols].to_string(index=False))
-    print(f"\nCross-pair summary saved -> {cross_csv}")
+    print("\nNext step: Phase 5 -- Machine Learning for Predicting Spread (brief pending).")
 
-print(f"\n{'='*65}")
-print("PHASE 4 COMPLETE")
-print(f"{'='*65}")
-print(f"\nNext step: Phase 5 -- Machine Learning for Predicting Spread (brief pending).")
+
+if __name__ == "__main__":
+    main()

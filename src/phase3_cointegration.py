@@ -24,7 +24,8 @@ Output:
 """
 
 import sys
-sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -233,8 +234,8 @@ def main():
     print(f"\n  BIC-selected lag summary: median={_bic_median}, max={_bic_max}")
     print(f"  -> Using k_ar_diff={K_AR_DIFF} (median BIC across all 15 pairs) "
           f"for all Johansen tests")
-    print(f"  Note: a shared lag is applied uniformly to all pairs rather than "
-          f"fitting a separate lag per pair.")
+    print("  Note: a shared lag is applied uniformly to all pairs rather than "
+          "fitting a separate lag per pair.")
 
     # -------------------------------------------------------------------------
     # 4. Run all tests for all 15 pairs
@@ -426,14 +427,14 @@ def main():
           f"{n_tests * alpha_nominal:.2f}  (i.e. ~1 false positive is likely)")
     print(f"  Bonferroni threshold : alpha / {n_tests} = {alpha_bonf:.4f}")
     if len(shortlist_bonf) == 0:
-        print(f"  Result: NO pair survives Bonferroni correction.")
-        print(f"  The pair(s) shortlisted at 5% may be statistical false positives.")
+        print("  Result: NO pair survives Bonferroni correction.")
+        print("  The pair(s) shortlisted at 5% may be statistical false positives.")
     else:
         print(f"  Pairs that also survive Bonferroni (EG p < {alpha_bonf:.4f}):")
         for _, row in shortlist_bonf.iterrows():
             print(f"    {row['Pair']}  EG p={row['EG_pval']:.4f}")
-    print(f"  NOTE: Johansen confirmation reduces (but does not eliminate) the")
-    print(f"  false-positive risk when the EG test alone is marginal.")
+    print("  NOTE: Johansen confirmation reduces (but does not eliminate) the")
+    print("  false-positive risk when the EG test alone is marginal.")
 
     # -------------------------------------------------------------------------
     # 8. Plot OLS residual (spread) series for all 15 pairs
@@ -618,9 +619,9 @@ def main():
     any_nvda_pass = nvda_df["EG_pass"].any() or nvda_df["Johansen_trace_pass"].any()
     print(f"\n  Result: {'At least one NVDA pair passes in the restricted window.' if any_nvda_pass else 'All NVDA pairs still fail in the restricted 2018-2022 window.'}")
     print(f"  Saved -> {nvda_csv}")
-    print(f"\n  Interpretation: Restricting to 2018-2022 removes the AI-driven structural")
-    print(f"  break in NVDA from mid-2023, but the cointegrating relationship with peer")
-    print(f"  stocks was also not established in the earlier period.")
+    print("\n  Interpretation: Restricting to 2018-2022 removes the AI-driven structural")
+    print("  break in NVDA from mid-2023, but the cointegrating relationship with peer")
+    print("  stocks was also not established in the earlier period.")
 
     # -------------------------------------------------------------------------
     # 11b. TRAINING-WINDOW COINTEGRATION SCREEN (2018-2021 only)
@@ -723,15 +724,15 @@ def main():
     print(f"\n  Full-period selected : {sorted(full_selected_pairs)}")
     print(f"  Train-only selected  : {sorted(train_selected_pairs)}")
     if same:
-        print(f"\n  RESULT: Both screens select the SAME pairs.")
-        print(f"  The look-ahead does not change which pairs are taken forward.")
+        print("\n  RESULT: Both screens select the SAME pairs.")
+        print("  The look-ahead does not change which pairs are taken forward.")
     else:
-        print(f"\n  RESULT: Selection DIFFERS between the two windows.")
+        print("\n  RESULT: Selection DIFFERS between the two windows.")
         if added:
             print(f"  Pairs added by training-only screen   : {sorted(added)}")
         if dropped:
             print(f"  Pairs dropped by training-only screen : {sorted(dropped)}")
-        print(f"  See comparison table above for details.")
+        print("  See comparison table above for details.")
 
     # -------------------------------------------------------------------------
     # 12. Export selected_pairs.csv -- contract for downstream phases
@@ -767,16 +768,16 @@ def main():
     print(f"\n{'='*65}")
     print("PHASE 3 -- COINTEGRATION SCREENING COMPLETE")
     print(f"{'='*65}")
-    print(f"\nOutputs:")
+    print("\nOutputs:")
     print(f"  {out_csv}")
     print(f"  {selected_csv}")
     print(f"  {nvda_csv}")
     print(f"  {chart1}")
     print(f"  {chart2}")
-    print(f"\nSelection:")
-    print(f"  Primary   -- EG or Johansen trace at 5%  -> AMZN/META")
-    print(f"  Secondary -- Johansen trace at 10% (supervisor-approved) -> MSFT/AAPL")
-    print(f"\nNext step: Phase 3b -- pairs trading strategy on selected pairs.")
+    print("\nSelection:")
+    print("  Primary   -- EG or Johansen trace at 5%  -> AMZN/META")
+    print("  Secondary -- Johansen trace at 10% (supervisor-approved) -> MSFT/AAPL")
+    print("\nNext step: Phase 3b -- pairs trading strategy on selected pairs.")
 
 
 if __name__ == "__main__":

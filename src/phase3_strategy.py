@@ -24,7 +24,8 @@ opposite direction remains permitted.
 """
 
 import sys
-sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -422,7 +423,7 @@ def run_pair(dep, indep, tests_passed):
     print(f"  Cost per leg    : {COST_PER_LEG*10_000:.1f} bps")
     print(f"  Train period    : 2018-01-01 to {TRAIN_END}")
     print(f"  Test period     : {TEST_START} to 2025-12-31")
-    print(f"  Execution       : signal at close(t), execute at open(t+1)")
+    print("  Execution       : signal at close(t), execute at open(t+1)")
 
     # Load close and open prices
     price_df, open_df, log_df, log_open_df = load_prices(dep, indep)
@@ -488,7 +489,7 @@ def run_pair(dep, indep, tests_passed):
     print(f"\n  Train/test comparison saved -> {cmp_csv.name}")
 
     # --- Walk-forward validation ---
-    print(f"\n  Walk-forward (annual, expanding window):")
+    print("\n  Walk-forward (annual, expanding window):")
     print(f"  {'Year':<6} {'HR':>7} {'IC':>9} {'R2':>6}  "
           f"{'Sharpe':>8}  {'Total PnL':>10}  {'PosRate':>9}")
     print(f"  {'-'*68}")
@@ -786,4 +787,4 @@ if __name__ == "__main__":
     print(f"\n{'='*65}")
     print("PHASE 3B COMPLETE")
     print(f"{'='*65}")
-    print(f"\nNext step: Phase 4 -- Testing mean reversion on unseen 2026 data.")
+    print("\nNext step: Phase 4 -- Testing mean reversion on unseen 2026 data.")

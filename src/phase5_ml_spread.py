@@ -67,7 +67,8 @@ Cross-pair:
 
 import os
 import sys
-sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 import warnings
 import numpy as np
 import pandas as pd
@@ -770,8 +771,8 @@ def run_phase5_pair(dep, indep, tests_passed):
     #   Labelled clearly as supplementary holdout — NOT the definitive Phase 4
     #   comparison (see run_phase5_final_2026 for that).
     # -----------------------------------------------------------------------
-    print(f"\n  Step 8a (supplementary) – 2022-2025 historical holdout "
-          f"(Phase 4-style / 2021 anchor, not the actual Phase 4 comparison) ...")
+    print("\n  Step 8a (supplementary) – 2022-2025 historical holdout "
+          "(Phase 4-style / 2021 anchor, not the actual Phase 4 comparison) ...")
 
     # Fixed anchor: mean/std from the validation year (2021), the year
     # immediately before the 2022-2025 test window
@@ -886,8 +887,8 @@ def run_phase5_pair(dep, indep, tests_passed):
                 dpi=150, bbox_inches="tight")
     plt.close()
     print(f"    Chart saved -> phase5_{tag}_holdout_comparison.png")
-    print(f"  [Definitive 2026 comparison is in run_phase5_final_2026 "
-          f"using the 2018-2024 model.]")
+    print("  [Definitive 2026 comparison is in run_phase5_final_2026 "
+          "using the 2018-2024 model.]")
 
     # Return cross-pair summary row (historical experiment only)
     return {
@@ -1014,7 +1015,7 @@ def run_phase5_final_2026(dep, indep, tests_passed, refresh=False):
     # ------------------------------------------------------------------
     # 6. Download 2026 data and evaluate LSTM on 2026
     # ------------------------------------------------------------------
-    print(f"\n  Downloading 2026 data ...")
+    print("\n  Downloading 2026 data ...")
     data_2026 = download_2026_prices(dep, indep, P4_TEST_START, P4_TEST_END_EX,
                                       refresh=refresh)
     if data_2026 is None:
@@ -1064,7 +1065,7 @@ def run_phase5_final_2026(dep, indep, tests_passed, refresh=False):
     test_mae_f   = eval_f["MAE_overall"]
     val_rmse_f_r = round(val_rmse_f, 4)
 
-    print(f"\n  2026 forecast evaluation (in z_std units):")
+    print("\n  2026 forecast evaluation (in z_std units):")
     print(f"    Val RMSE (2025, early-stopping):   {val_rmse_f_r}")
     print(f"    {'Horizon':<10}  {'LSTM RMSE':>10}  {'LSTM MAE':>9}  "
           f"{'Persist RMSE':>13}  {'Persist MAE':>12}")
@@ -1151,7 +1152,7 @@ def run_phase5_final_2026(dep, indep, tests_passed, refresh=False):
     print(f"\n  LSTM convergence (2026): "
           f"{(conv_f==1).sum()} converging ({conv_pct_f:.1f}%)  |  "
           f"{(conv_f==-1).sum()} diverging ({100-conv_pct_f:.1f}%)")
-    print(f"  [Convergence rule fixed before 2026 evaluation — no tuning on 2026]")
+    print("  [Convergence rule fixed before 2026 evaluation — no tuning on 2026]")
 
     # ------------------------------------------------------------------
     # 8. Phase 4 baseline — OLS 2018-2025, fixed 2025 anchor, entry ±2, exit 0
@@ -1192,7 +1193,7 @@ def run_phase5_final_2026(dep, indep, tests_passed, refresh=False):
         n_p4_sigs = len(p4_signal_dates)
         print(f"  Verification: all {n_p4_sigs} Phase 4 signal date(s) have "
               f"LSTM predictions" if n_p4_sigs else
-              f"  Verification: no Phase 4 signals fired in 2026")
+              "  Verification: no Phase 4 signals fired in 2026")
 
     # ------------------------------------------------------------------
     # 9. LSTM-enhanced — same Phase 4 z-score signals, entries gated by
@@ -1223,7 +1224,7 @@ def run_phase5_final_2026(dep, indep, tests_passed, refresh=False):
         ("Positive_Day_Rate_pct", "Positive day rate %"),
     ]
 
-    print(f"\n  Step 8 – Phase 4 baseline vs LSTM-enhanced (2026):")
+    print("\n  Step 8 – Phase 4 baseline vs LSTM-enhanced (2026):")
     row_fmt = "    {:<28}  {:>16}  {:>16}"
     print(row_fmt.format("Metric", "Phase 4 baseline", "LSTM-enhanced"))
     print("    " + "-" * 62)
@@ -1243,7 +1244,7 @@ def run_phase5_final_2026(dep, indep, tests_passed, refresh=False):
     wr_lstm_s = _wr_str(wr_lstm, n_comp_lstm, n_entries_lstm)
     print(row_fmt.format("Win rate (completed only)", wr_p4_s, wr_lstm_s))
     print()
-    print(f"    Signal counts:")
+    print("    Signal counts:")
     blocked = (n_long_p4 + n_short_p4) - (n_long_lstm + n_short_lstm)
     print(f"      Phase 4 : {n_long_p4} long + {n_short_p4} short = "
           f"{n_long_p4+n_short_p4} total")
@@ -1479,21 +1480,21 @@ def main():
           f"Dropout({DROPOUT})  Dense({HORIZON})")
     print(f"  Lookback / horizon  : {SEQ_LEN}d / {HORIZON}d   Seed : {SEED}")
     print()
-    print(f"  Experiment A — Historical chronological holdout")
+    print("  Experiment A — Historical chronological holdout")
     print(f"    OLS + scaler + LSTM train : 2018-01-01 to {ML_TRAIN_END}")
     print(f"    LSTM val                  : {ML_VAL_START}–{ML_VAL_END}")
     print(f"    Test (supplementary)      : {ML_TEST_START}–2025-12-31")
-    print(f"    Step 8a comparison        : Phase 4-style baseline "
-          f"(2021 anchor) vs LSTM-enhanced")
+    print("    Step 8a comparison        : Phase 4-style baseline "
+          "(2021 anchor) vs LSTM-enhanced")
     print()
-    print(f"  Experiment B — Final 2026 evaluation (Step 8, definitive)")
+    print("  Experiment B — Final 2026 evaluation (Step 8, definitive)")
     print(f"    OLS + scaler + LSTM train : 2018-01-01 to {FINAL_TRAIN_END}")
     print(f"    LSTM val                  : {FINAL_VAL_START}–{FINAL_VAL_END}")
     print(f"    Unseen test               : {P4_TEST_START}–{P4_TEST_END}")
     print(f"    Phase 4 baseline          : OLS 2018-2025, 2025 anchor, "
           f"entry ±{Z_ENTRY_P4}, exit {Z_EXIT_P4}")
-    print(f"    LSTM-enhanced             : same Phase 4 signals, "
-          f"entries gated by final LSTM convergence")
+    print("    LSTM-enhanced             : same Phase 4 signals, "
+          "entries gated by final LSTM convergence")
 
     selected_csv = REPORTS_DIR / "selected_pairs.csv"
     if not selected_csv.exists():
@@ -1521,7 +1522,7 @@ def main():
     hist_df.to_csv(hist_csv, index=False)
 
     col_w = 14
-    print(f"\n  Supplementary 2022-2025 holdout summary:")
+    print("\n  Supplementary 2022-2025 holdout summary:")
     hdr = (f"    {'Pair':<12}  {'TestRMSE':>{col_w}}  {'Conv%':>{col_w}}  "
            f"{'P4style Sharpe':>{col_w}}  {'LSTM Sharpe':>{col_w}}")
     print(hdr)

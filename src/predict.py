@@ -15,7 +15,8 @@ Usage:
 """
 
 import sys
-sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 from pathlib import Path
 
 import numpy as np
@@ -150,7 +151,7 @@ def main():
         print(f"  Signal date      : {r['signal_date'].date()}")
         print(f"  z_std (current)  : {r['z_std']:+.3f}")
         print(
-            f"  5-day forecast   : "
+            "  5-day forecast   : "
             + "  ".join(f"h{i+1}={v:+.3f}" for i, v in enumerate(r["forecast"]))
         )
         mean_abs = float(np.mean(np.abs(r["forecast"])))

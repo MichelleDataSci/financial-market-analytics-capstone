@@ -29,7 +29,8 @@ Usage:
 """
 
 import sys
-sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 from pathlib import Path
 import warnings
 warnings.filterwarnings("ignore")

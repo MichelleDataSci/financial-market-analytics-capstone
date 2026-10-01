@@ -56,6 +56,30 @@ _KNOWN_PAIRS: dict[str, tuple[str, str]] = {}  # "AMZN_META" -> ("AMZN", "META")
 _LOAD_FAILED: set[str] = set()
 
 
+def _check_and_load_artefacts(tag: str, suffix: str = "v1") -> tuple[str, object]:
+    """
+    Pre-check file existence, then attempt to load artefacts.
+
+    Returns ("ok", (model, ols, scaler)), ("missing", None), or ("failed", None).
+
+    "missing" is returned when any of the three expected files is absent on disk.
+    "failed"  is returned only when all files exist but load_artefacts() raises —
+              this is the 503 case (files present, dependency / deserialization failure).
+    Checking existence first avoids relying on tf.keras / joblib to raise
+    FileNotFoundError (TF raises ValueError for a missing path, which would
+    otherwise be mis-classified as a load failure).
+    """
+    model_path  = MODELS_DIR / f"{tag}_lstm_{suffix}.keras"
+    ols_path    = MODELS_DIR / f"{tag}_ols_{suffix}.joblib"
+    scaler_path = MODELS_DIR / f"{tag}_scaler_{suffix}.joblib"
+    if not all(p.exists() for p in (model_path, ols_path, scaler_path)):
+        return "missing", None
+    try:
+        return "ok", load_artefacts(tag, suffix=suffix)
+    except Exception:
+        return "failed", None
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     sel_csv = REPORTS_DIR / "selected_pairs.csv"
@@ -65,17 +89,18 @@ async def lifespan(app: FastAPI):
             dep, indep = row["OLS_direction"].split("~")
             tag = f"{dep}_{indep}"
             _KNOWN_PAIRS[tag] = (dep, indep)
-            try:
-                _ARTEFACTS[tag] = load_artefacts(tag)
+            status, artefacts = _check_and_load_artefacts(tag)
+            if status == "ok":
+                _ARTEFACTS[tag] = artefacts
                 print(f"  Loaded artefacts for {tag}", flush=True)
-            except FileNotFoundError:
+            elif status == "missing":
                 print(
                     f"  Warning: model files not found for {tag} — run phase5_ml_spread.py first.",
                     file=sys.stderr,
                 )
-            except Exception as exc:
+            else:  # "failed"
                 print(
-                    f"  Warning: model files present but failed to load for {tag}: {exc}",
+                    f"  Warning: model files present but failed to load for {tag}.",
                     file=sys.stderr,
                 )
                 _LOAD_FAILED.add(tag)

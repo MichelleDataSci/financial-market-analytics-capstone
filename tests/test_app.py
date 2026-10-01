@@ -364,17 +364,63 @@ class TestPredictEndpoint:
         resp = self._ctx.get("/api/predict/NOT_A_PAIR")
         assert resp.status_code == 404
 
-    def test_load_failure_returns_503(self):
-        """When model files exist on disk but failed to load at startup, endpoint returns 503."""
+    def test_missing_files_returns_404(self):
+        """Files not found on disk: _check_and_load_artefacts returns 'missing'
+        and the endpoint returns 404 (not 503)."""
         from app import main as app_main
+        from app.main import _check_and_load_artefacts
 
-        pair = "FAKE_FAIL"
-        app_main._KNOWN_PAIRS[pair] = ("FAKE", "FAIL")
-        app_main._LOAD_FAILED.add(pair)
+        pair = "MISSING_PAIR_X"
+        # Pre-condition: no files exist for this tag, so status must be "missing"
+        status, _ = _check_and_load_artefacts(pair)
+        assert status == "missing", (
+            f"Expected 'missing' for non-existent pair, got '{status}'"
+        )
+
+        app_main._KNOWN_PAIRS[pair] = ("MISSING", "PAIR")
+        # State mirrors what lifespan produces for a "missing" status: pair is
+        # in _KNOWN_PAIRS, absent from _ARTEFACTS, absent from _LOAD_FAILED.
         try:
+            resp = self._ctx.get(f"/api/predict/{pair}")
+            assert resp.status_code == 404
+            assert "not found" in resp.json()["detail"].lower()
+        finally:
+            app_main._KNOWN_PAIRS.pop(pair, None)
+
+    def test_corrupted_files_returns_503(self):
+        """Files present on disk but unloadable: _check_and_load_artefacts
+        returns 'failed' and the endpoint returns 503 (not 404)."""
+        from app import main as app_main
+        from app.main import _check_and_load_artefacts
+        from utils import MODELS_DIR
+
+        pair = "CORRUPT_TEST_X"
+        files = [
+            MODELS_DIR / f"{pair}_lstm_v1.keras",
+            MODELS_DIR / f"{pair}_ols_v1.joblib",
+            MODELS_DIR / f"{pair}_scaler_v1.joblib",
+        ]
+        try:
+            for f in files:
+                f.write_bytes(b"this is not a valid model or joblib file")
+
+            # Exercise the actual detection logic: all files exist, but loading
+            # them raises because the content is garbage.
+            status, _ = _check_and_load_artefacts(pair)
+            assert status == "failed", (
+                f"Expected 'failed' for corrupted files, got '{status}'"
+            )
+
+            # Populate state as lifespan would for a "failed" status.
+            app_main._KNOWN_PAIRS[pair] = ("CORRUPT", "TEST")
+            app_main._LOAD_FAILED.add(pair)
+
             resp = self._ctx.get(f"/api/predict/{pair}")
             assert resp.status_code == 503
             assert "present on disk" in resp.json()["detail"]
         finally:
-            del app_main._KNOWN_PAIRS[pair]
+            for f in files:
+                if f.exists():
+                    f.unlink()
+            app_main._KNOWN_PAIRS.pop(pair, None)
             app_main._LOAD_FAILED.discard(pair)

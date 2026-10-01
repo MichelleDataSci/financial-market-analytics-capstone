@@ -35,17 +35,21 @@ The work is delivered as **Phases 1–6** per the phase breakdown: Phase 1 (data
 ├── app/
 │   ├── main.py                 # FastAPI application
 │   └── templates/              # Jinja2 HTML templates
-├── models/                     # saved LSTM model weights and scalers
+├── models/                     # saved LSTM/OLS/scaler artefacts — "_v1" = final model
+│                               # (trained 2018–2024), "_hist_v1" = historical model
+│                               # (trained 2018–2020, used for 2022–2025 holdout eval)
 ├── outputs/
 │   ├── charts/                 # saved figures (named by pair)
 │   └── reports/                # exported tables / summary CSVs
-├── tests/                      # pytest suite (92 tests)
+├── tests/                      # pytest suite (96 tests)
 ├── requirements.txt
 ├── requirements_exact.txt      # pinned versions for exact reproduction
 └── README.md
 ```
 
 ## Setup
+
+Built and tested on Python 3.11 (see `.github/workflows/tests.yml`).
 
 ```bash
 pip install -r requirements.txt
@@ -118,7 +122,7 @@ Reads saved artefacts from `models/` and cached raw prices from `data/raw/`. Req
 python -m pytest tests/ -v
 ```
 
-92 tests covering the backtesting engine (Phase 3b), Phase 5 utilities, predict utilities, convergence gate evaluation, and the FastAPI app.
+96 tests covering the backtesting engine (Phase 3b), Phase 5 utilities, predict utilities, convergence gate evaluation, and the FastAPI app.
 
 ## FastAPI deployment
 
@@ -137,7 +141,7 @@ Then open `http://127.0.0.1:8000` in your browser.
 | `GET`  | `/` | Form page — select cached tickers or upload a CSV |
 | `POST` | `/analyse` | Run analysis and return an HTML results page |
 | `POST` | `/api/analyse` | Same analysis as JSON (charts omitted) |
-| `GET`  | `/api/predict/{pair}` | Latest 5-day z-score forecast and convergence gate for a saved pair (e.g. `AMZN_META`, `MSFT_AAPL`). Artefacts loaded once at startup; no retraining. Returns 404 for unknown pairs. |
+| `GET`  | `/api/predict/{pair}` | Latest 5-day z-score forecast and convergence gate for a saved pair (e.g. `AMZN_META`, `MSFT_AAPL`). Artefacts loaded once at startup; no retraining. Returns 404 if the pair is unknown or its model files are missing; returns 503 if the files exist on disk but could not be loaded (dependency or deserialization failure). |
 
 ### What the user sees
 

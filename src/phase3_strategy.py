@@ -259,6 +259,26 @@ def compute_metrics(bt_df, label=""):
     pos_changes  = pos.diff().abs()
     n_pos_chg    = int((pos_changes > 0).sum())
 
+    # Per-trade statistics derived from the trade log (all trades including open ones)
+    trade_log = extract_trade_log(bt_df, cost_per_leg=COST_PER_LEG)
+    if not trade_log.empty:
+        trade_pnls    = trade_log["Net_PnL"].values.astype(float)
+        holding_days  = trade_log["Holding_Days"].values.astype(float)
+        trade_pnl_std = float(np.std(trade_pnls, ddof=1)) if len(trade_pnls) > 1 else 0.0
+        avg_hold      = float(np.mean(holding_days))
+        med_hold      = float(np.median(holding_days))
+        long_mask  = trade_log["Position"] == "Long Spread"
+        short_mask = trade_log["Position"] == "Short Spread"
+        long_pnl   = float(trade_log.loc[long_mask,  "Net_PnL"].sum())
+        short_pnl  = float(trade_log.loc[short_mask, "Net_PnL"].sum())
+        long_n     = int(long_mask.sum())
+        short_n    = int(short_mask.sum())
+    else:
+        trade_pnl_std = 0.0
+        avg_hold = med_hold = 0.0
+        long_pnl = short_pnl = 0.0
+        long_n = short_n = 0
+
     return {
         "Period":                label,
         "Days":                  n,
@@ -273,6 +293,13 @@ def compute_metrics(bt_df, label=""):
         "Num_position_chg":      n_pos_chg,
         "Num_trades":            n_trades,
         "Avg_trade_PnL":         round(avg_trade, 6),
+        "Trade_PnL_std":         round(trade_pnl_std, 6),
+        "Avg_holding_period_days": round(avg_hold, 1),
+        "Median_holding_period_days": round(med_hold, 1),
+        "Long_Total_PnL":        round(long_pnl, 6),
+        "Long_Num_trades":       long_n,
+        "Short_Total_PnL":       round(short_pnl, 6),
+        "Short_Num_trades":      short_n,
         "Pct_in_market":         round(pct_in_mkt, 2),
     }
 

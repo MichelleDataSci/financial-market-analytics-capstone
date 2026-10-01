@@ -43,7 +43,7 @@ from phase3_strategy import (  # noqa: E402
     compute_metrics, extract_trade_log,
 )
 from predict import load_artefacts, forecast_with_artefacts  # noqa: E402
-from utils import DATA_RAW, REPORTS_DIR  # noqa: E402
+from utils import DATA_RAW, MODELS_DIR, REPORTS_DIR  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Startup: load LSTM artefacts once for all selected pairs
@@ -51,6 +51,9 @@ from utils import DATA_RAW, REPORTS_DIR  # noqa: E402
 
 _ARTEFACTS: dict[str, tuple] = {}  # tag -> (model, ols_params, scaler_params)
 _KNOWN_PAIRS: dict[str, tuple[str, str]] = {}  # "AMZN_META" -> ("AMZN", "META")
+# Tracks pairs whose files existed on disk but could not be loaded (for 503 vs 404
+# differentiation on /api/predict).  Absent = files missing; present = load failure.
+_LOAD_FAILED: set[str] = set()
 
 
 @asynccontextmanager
@@ -65,8 +68,17 @@ async def lifespan(app: FastAPI):
             try:
                 _ARTEFACTS[tag] = load_artefacts(tag)
                 print(f"  Loaded artefacts for {tag}", flush=True)
+            except FileNotFoundError:
+                print(
+                    f"  Warning: model files not found for {tag} — run phase5_ml_spread.py first.",
+                    file=sys.stderr,
+                )
             except Exception as exc:
-                print(f"  Warning: could not load artefacts for {tag}: {exc}", file=sys.stderr)
+                print(
+                    f"  Warning: model files present but failed to load for {tag}: {exc}",
+                    file=sys.stderr,
+                )
+                _LOAD_FAILED.add(tag)
     yield
 
 
@@ -196,8 +208,9 @@ def run_analysis(
             f"Need at least {MIN_ROWS} rows after alignment; got {len(close_df)}."
         )
 
+    close_df = close_df[(close_df > 0).all(axis=1)]   # drop zero/negative before log
     log_df = np.log(close_df)
-    log_df = log_df[np.isfinite(log_df).all(axis=1)]
+    log_df = log_df[np.isfinite(log_df).all(axis=1)]   # safety net for any remaining non-finite
     if len(log_df) < MIN_ROWS:
         raise ValueError(
             f"Need at least {MIN_ROWS} finite-price rows after alignment; got {len(log_df)}."
@@ -271,7 +284,8 @@ def run_analysis(
 
         spread_open = None
         if open_df is not None:
-            log_open    = np.log(open_df)
+            open_df_pos = open_df[(open_df > 0).all(axis=1)]
+            log_open    = np.log(open_df_pos)
             spread_open = build_open_spread(log_open, dep, indep, hr, ic)
 
         bt_df    = backtest(zscore, spread, Z_ENTRY, Z_EXIT, Z_STOP,
@@ -372,8 +386,9 @@ async def api_predict(pair: str):
 
     Artefacts are loaded once at startup; this endpoint does not retrain.
 
-    Raises 404 if the pair is not in selected_pairs.csv or its artefacts
-    could not be loaded at startup.
+    Raises 404 if the pair is not in selected_pairs.csv or model files are missing.
+    Raises 503 if model files exist on disk but could not be loaded (dependency or
+    deserialization failure).
     """
     if pair not in _KNOWN_PAIRS:
         known = sorted(_KNOWN_PAIRS.keys())
@@ -385,9 +400,17 @@ async def api_predict(pair: str):
             ),
         )
     if pair not in _ARTEFACTS:
+        if pair in _LOAD_FAILED:
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    f"Model files for '{pair}' are present on disk but could not be loaded "
+                    "(dependency or deserialization failure). Check server logs."
+                ),
+            )
         raise HTTPException(
             status_code=404,
-            detail=f"Artefacts for '{pair}' could not be loaded. Run phase5_ml_spread.py first.",
+            detail=f"Model files for '{pair}' not found. Run phase5_ml_spread.py first.",
         )
 
     dep, indep = _KNOWN_PAIRS[pair]

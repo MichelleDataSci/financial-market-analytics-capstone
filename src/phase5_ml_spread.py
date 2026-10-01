@@ -338,6 +338,41 @@ def persistence_baseline(X, y_true):
     return result
 
 
+def linear_baseline(X_train, y_train, X_test, y_true):
+    """
+    Linear regression baseline: one sklearn LinearRegression per horizon step,
+    trained on the flattened lag/roll_std features (X_train[:, -1, :] — last
+    row of each input window, i.e. the lag1/lag2/lag3/roll_std at the signal bar).
+
+    Trained on the same LSTM training set; evaluated on X_test / y_true.
+    Returns dict with LR_RMSE_h{1..5}, LR_MAE_h{1..5},
+    LR_RMSE_overall, LR_MAE_overall.
+    """
+    from sklearn.linear_model import LinearRegression as _LR
+
+    # Features: last-row of each input window (shape: n_samples, n_features)
+    X_tr_flat = X_train[:, -1, :]
+    X_te_flat = X_test[:,  -1, :]
+
+    horizon   = y_true.shape[1]
+    y_pred_lr = np.zeros_like(y_true, dtype=np.float32)
+
+    for h in range(horizon):
+        reg = _LR()
+        reg.fit(X_tr_flat, y_train[:, h])
+        y_pred_lr[:, h] = reg.predict(X_te_flat).astype(np.float32)
+
+    result = {}
+    for h in range(horizon):
+        err = y_true[:, h] - y_pred_lr[:, h]
+        result[f"LR_RMSE_h{h+1}"] = float(np.sqrt(np.mean(err ** 2)))
+        result[f"LR_MAE_h{h+1}"]  = float(np.mean(np.abs(err)))
+    all_err = (y_true - y_pred_lr).ravel()
+    result["LR_RMSE_overall"] = float(np.sqrt(np.mean(all_err ** 2)))
+    result["LR_MAE_overall"]  = float(np.mean(np.abs(all_err)))
+    return result, y_pred_lr
+
+
 # ---------------------------------------------------------------------------
 # Model artefact persistence (Task 3)
 # ---------------------------------------------------------------------------
@@ -676,23 +711,29 @@ def run_phase5_pair(dep, indep, tests_passed):
     # Step 6: Evaluate on 2022-2025 test set
     # -----------------------------------------------------------------------
     y_pred_te = model.predict(X_te, verbose=0)
-    eval_dict   = evaluate_predictions(y_te, y_pred_te)
+    eval_dict    = evaluate_predictions(y_te, y_pred_te)
     persist_dict = persistence_baseline(X_te, y_te)
+    lr_dict, _   = linear_baseline(X_tr, y_tr, X_te, y_te)
     print(f"\n  Step 6 – test evaluation on {ML_TEST_START}–{idx_te[-1].date()} "
           f"[out-of-sample, in z_std units]:")
     print(f"    {'Horizon':<10}  {'LSTM RMSE':>10}  {'LSTM MAE':>9}  "
-          f"{'Persist RMSE':>13}  {'Persist MAE':>12}")
+          f"{'Persist RMSE':>13}  {'Persist MAE':>12}  "
+          f"{'LR RMSE':>9}  {'LR MAE':>8}")
     for h in range(HORIZON):
         print(f"    h+{h+1:<7}  "
               f"{eval_dict[f'RMSE_h{h+1}']:>10.4f}  "
               f"{eval_dict[f'MAE_h{h+1}']:>9.4f}  "
               f"{persist_dict[f'Persist_RMSE_h{h+1}']:>13.4f}  "
-              f"{persist_dict[f'Persist_MAE_h{h+1}']:>12.4f}")
+              f"{persist_dict[f'Persist_MAE_h{h+1}']:>12.4f}  "
+              f"{lr_dict[f'LR_RMSE_h{h+1}']:>9.4f}  "
+              f"{lr_dict[f'LR_MAE_h{h+1}']:>8.4f}")
     print(f"    {'Overall':<10}  "
           f"{eval_dict['RMSE_overall']:>10.4f}  "
           f"{eval_dict['MAE_overall']:>9.4f}  "
           f"{persist_dict['Persist_RMSE_overall']:>13.4f}  "
-          f"{persist_dict['Persist_MAE_overall']:>12.4f}")
+          f"{persist_dict['Persist_MAE_overall']:>12.4f}  "
+          f"{lr_dict['LR_RMSE_overall']:>9.4f}  "
+          f"{lr_dict['LR_MAE_overall']:>8.4f}")
 
     # Save metrics CSV
     # Columns: Dataset distinguishes val (2021, early-stopping criterion) from
@@ -703,7 +744,9 @@ def run_phase5_pair(dep, indep, tests_passed):
                      "RMSE": round(eval_dict[f"RMSE_h{h+1}"], 4),
                      "MAE":  round(eval_dict[f"MAE_h{h+1}"],  4),
                      "Persist_RMSE": round(persist_dict[f"Persist_RMSE_h{h+1}"], 4),
-                     "Persist_MAE":  round(persist_dict[f"Persist_MAE_h{h+1}"],  4)}
+                     "Persist_MAE":  round(persist_dict[f"Persist_MAE_h{h+1}"],  4),
+                     "LR_RMSE": round(lr_dict[f"LR_RMSE_h{h+1}"], 4),
+                     "LR_MAE":  round(lr_dict[f"LR_MAE_h{h+1}"],  4)}
                     for h in range(HORIZON)]
     metrics_rows.append({"Pair": f"{dep}/{indep}",
                          "Dataset": f"test ({ML_TEST_START}–{idx_te[-1].date()})",
@@ -711,14 +754,18 @@ def run_phase5_pair(dep, indep, tests_passed):
                          "RMSE": round(eval_dict["RMSE_overall"], 4),
                          "MAE":  round(eval_dict["MAE_overall"],  4),
                          "Persist_RMSE": round(persist_dict["Persist_RMSE_overall"], 4),
-                         "Persist_MAE":  round(persist_dict["Persist_MAE_overall"],  4)})
+                         "Persist_MAE":  round(persist_dict["Persist_MAE_overall"],  4),
+                         "LR_RMSE": round(lr_dict["LR_RMSE_overall"], 4),
+                         "LR_MAE":  round(lr_dict["LR_MAE_overall"],  4)})
     metrics_rows.append({"Pair": f"{dep}/{indep}",
                          "Dataset": f"val ({ML_VAL_START}–{ML_VAL_END})",
                          "Horizon": "Overall",
                          "RMSE": round(val_rmse, 4),
                          "MAE":  None,
                          "Persist_RMSE": None,
-                         "Persist_MAE":  None})
+                         "Persist_MAE":  None,
+                         "LR_RMSE": None,
+                         "LR_MAE":  None})
     pd.DataFrame(metrics_rows).to_csv(
         REPORTS_DIR / f"phase5_{tag}_lstm_metrics.csv", index=False)
     print(f"  Metrics CSV saved -> phase5_{tag}_lstm_metrics.csv")

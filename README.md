@@ -57,6 +57,10 @@ For exact reproduction of all outputs and a warnings-free run, use the pinned ve
 pip install -r requirements_exact.txt
 ```
 
+## Data methodology
+
+All OHLC downloads call `yfinance` with `auto_adjust=True` (see `src/phase1_data.py` and `src/utils.py → load_or_download_2026`). This means every `Close` (and `Open`, `High`, `Low`) series is already adjusted for stock splits and cash dividends, so no manual adjustment step is needed. Using adjusted prices is essential for consistency: un-adjusted prices contain artificial price jumps on ex-dividend dates that distort daily return calculations and can falsely inflate or deflate cointegration test statistics.
+
 ## End-to-end run guide
 
 Run scripts in order — each phase depends on outputs from the previous:

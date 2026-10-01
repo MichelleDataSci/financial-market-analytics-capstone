@@ -291,6 +291,35 @@ class TestCachedTickerPairs:
         assert "0.0143" in resp.text
 
 
+class TestInputValidation:
+    """Tests for edge-case input validation in _load_cached and _parse_uploaded_csv."""
+
+    def test_same_ticker_both_slots_returns_422(self):
+        """Selecting the same ticker for both ticker1 and ticker2 must return 422."""
+        resp = client.post(
+            "/api/analyse",
+            data={"ticker1": "AMZN", "ticker2": "AMZN"},
+        )
+        assert resp.status_code == 422
+        assert "same" in resp.json()["detail"].lower()
+
+    def test_csv_with_only_one_numeric_column_returns_422(self):
+        """A CSV with fewer than two numeric price columns must return 422."""
+        df = pd.DataFrame({
+            "Date":   pd.bdate_range("2020-01-02", periods=80),
+            "Price1": np.cumsum(np.ones(80)) + 100,
+            "Label":  ["foo"] * 80,   # non-numeric: only one usable price column
+        }).set_index("Date")
+        resp = client.post(
+            "/api/analyse",
+            files={"file": ("one_col.csv", _make_csv(df), "text/csv")},
+            data={"ticker1": "", "ticker2": ""},
+        )
+        assert resp.status_code == 422
+        detail = resp.json()["detail"].lower()
+        assert "two" in detail or "numeric" in detail or "column" in detail
+
+
 @pytest.mark.slow
 class TestPredictEndpoint:
     """Integration tests for GET /api/predict/{pair} — loads TF artefacts.
@@ -334,3 +363,18 @@ class TestPredictEndpoint:
     def test_malformed_pair_returns_404(self):
         resp = self._ctx.get("/api/predict/NOT_A_PAIR")
         assert resp.status_code == 404
+
+    def test_load_failure_returns_503(self):
+        """When model files exist on disk but failed to load at startup, endpoint returns 503."""
+        from app import main as app_main
+
+        pair = "FAKE_FAIL"
+        app_main._KNOWN_PAIRS[pair] = ("FAKE", "FAIL")
+        app_main._LOAD_FAILED.add(pair)
+        try:
+            resp = self._ctx.get(f"/api/predict/{pair}")
+            assert resp.status_code == 503
+            assert "present on disk" in resp.json()["detail"]
+        finally:
+            del app_main._KNOWN_PAIRS[pair]
+            app_main._LOAD_FAILED.discard(pair)
